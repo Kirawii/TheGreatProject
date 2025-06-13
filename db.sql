@@ -72,7 +72,6 @@
 -- );
 -- CREATE INDEX IX_Trade_Date_RegionCountry
 --         ON FactTrade(date_key, region_id, partner_country_id);
-
 -- CREATE TABLE Result_PerCapitaGDP_Ranking(
 --     analysis_id INT IDENTITY(1,1) PRIMARY KEY,
 --     region_id INT NOT NULL REFERENCES DimRegion(region_id),
