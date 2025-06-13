@@ -154,7 +154,7 @@ USE TGP;
 GO
 
 BULK INSERT dbo.StagingProvince
-FROM '/var/opt/mssql/import/Downloads/database/DataSet/province.csv'
+FROM 'E:\debian\note1\数据库\TGP\Downloads\database\DataSet\province.csv'
 WITH (
     FIRSTROW = 2,
     FORMAT = 'CSV',
@@ -163,23 +163,23 @@ WITH (
 );
 
 
--- 导入市级，如果存在字段中可能含逗号，使用 FORMAT='CSV'
-BULK INSERT dbo.StagingCity
-FROM '/var/opt/mssql/import/Downloads/database/DataSet/city.csv'
-WITH (
-    FIRSTROW = 2,
-    FORMAT = 'CSV',
-    FIELDQUOTE = '"',
-    TABLOCK
-);
+-- -- 导入市级，如果存在字段中可能含逗号，使用 FORMAT='CSV'
+-- BULK INSERT dbo.StagingCity
+-- FROM '/var/opt/mssql/import/Downloads/database/DataSet/city.csv'
+-- WITH (
+--     FIRSTROW = 2,
+--     FORMAT = 'CSV',
+--     FIELDQUOTE = '"',
+--     TABLOCK
+-- );
 
--- 导入县级
-BULK INSERT dbo.StagingCounty
-FROM '/var/opt/mssql/import/Downloads/database/DataSet/county.csv'
-WITH (
-    FIRSTROW = 2,
-    FIELDTERMINATOR = ',',
-    ROWTERMINATOR = '\n',
-    TABLOCK
-);
-GO
+-- -- 导入县级
+-- BULK INSERT dbo.StagingCounty
+-- FROM '/var/opt/mssql/import/Downloads/database/DataSet/county.csv'
+-- WITH (
+--     FIRSTROW = 2,
+--     FIELDTERMINATOR = ',',
+--     ROWTERMINATOR = '\n',
+--     TABLOCK
+-- );
+-- GO
