@@ -52,42 +52,46 @@
 
 ### 表结构
 
-| 表名                            | 类型 | 业务粒度       | 主键 / 组合键                               | 关键字段                                            | 能支撑的核心查询                         |
-| ------------------------------- | ---- | -------------- | ------------------------------------------- | --------------------------------------------------- | ---------------------------------------- |
-| **DimTime**                     | 维度 | 日期 (天)      | `date_key`                                  | `year`,`quarter`,`month`,`year_month`,`month_start` | 所有按年/季/月的同比、环比、趋势分析     |
-| **DimRegion**                   | 维度 | 行政区         | `region_id`                                 | `region_name`,`region_level`,`parent_region_id`     | GDP 与贸易按省/市/区县到大区的钻取       |
-| **DimCountry**                  | 维度 | 贸易伙伴国     | `country_id`                                | `country_name`                                      | 进出口对象筛选（中美比较、TOP N 伙伴等） |
-| **DimRegionGroup**              | 维度 | 大区分组       | `region_group_id`                           | `group_name`                                        | 东部/中部/西部/东北聚合                  |
-| **Bridge_Region_Group**         | 桥表 | 区域–大区映射  | `region_id`,`region_group_id`               | —                                                   | 各省归属大区的多对多关系                 |
-| **FactGDP**                     | 事实 | 区域×日期      | `region_id`,`date_key`                      | `gdp_value`                                         | (1)–(5)、(7) 及出口贡献率分母            |
-| **FactDemographics**            | 事实 | 区域×日期      | `region_id`,`date_key`                      | `population`,`area_km2`                             | 动态面积、人口、人口密度、人均 GDP       |
-| **FactTrade**                   | 事实 | 区域×国家×日期 | `region_id`,`partner_country_id`,`date_key` | `exports_value`,`imports_value`                     | 全部贸易相关查询 (1)-(2)-2-(5)           |
-| **Result_PerCapitaGDP_Ranking** | 结果 | 区域×日期      | `analysis_id`                               | `per_capita_gdp`,`rank_in_date`                     | (1)-(5) 结果持久化                       |
-| **Result_ExportContribution**   | 结果 | 大区×区间      | `analysis_id`                               | `contribution`,`compare_flag`,`date_from`,`date_to` | (1)-(6) 出口贡献率比较                   |
+| 表名                                  | 类型 | 业务粒度         | 主键 / 组合键                                     | 关键字段                                                      | 能支撑的核心查询                         |
+| ------------------------------------- | ---- | ---------------- | ------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------- |
+| **DimTime**                     | 维度 | 日期 (天)        | `date_key`                                      | `year`,`quarter`,`month`,`year_month`,`month_start` | 所有按年/季/月的同比、环比、趋势分析     |
+| **DimRegion**                   | 维度 | 行政区           | `region_id`                                     | `region_name`,`region_level`,`parent_region_id`         | GDP 与贸易按省/市/区县到大区的钻取       |
+| **DimCountry**                  | 维度 | 贸易伙伴国       | `country_id`                                    | `country_name`                                              | 进出口对象筛选（中美比较、TOP N 伙伴等） |
+| **DimRegionGroup**              | 维度 | 大区分组         | `region_group_id`                               | `group_name`                                                | 东部/中部/西部/东北聚合                  |
+| **Bridge_Region_Group**         | 桥表 | 区域–大区映射   | `region_id`,`region_group_id`                 | —                                                            | 各省归属大区的多对多关系                 |
+| **FactGDP**                     | 事实 | 区域×日期       | `region_id`,`date_key`                        | `gdp_value`                                                 | (1)–(5)、(7) 及出口贡献率分母           |
+| **FactDemographics**            | 事实 | 区域×日期       | `region_id`,`date_key`                        | `population`,`area_km2`                                   | 动态面积、人口、人口密度、人均 GDP       |
+| **FactTrade**                   | 事实 | 区域×国家×日期 | `region_id`,`partner_country_id`,`date_key` | `exports_value`,`imports_value`                           | 全部贸易相关查询 (1)-(2)-2-(5)           |
+| **Result_PerCapitaGDP_Ranking** | 结果 | 区域×日期       | `analysis_id`                                   | `per_capita_gdp`,`rank_in_date`                           | (1)-(5) 结果持久化                       |
+| **Result_ExportContribution**   | 结果 | 大区×区间       | `analysis_id`                                   | `contribution`,`compare_flag`,`date_from`,`date_to`   | (1)-(6) 出口贡献率比较                   |
 
 ### 表分析
 
-| 查询需求                                         | 所需数据                                                     | 结构支持情况 | 说明                                                         |
-| ------------------------------------------------ | ------------------------------------------------------------ | ------------ | ------------------------------------------------------------ |
-| **1-(1)** 指定时间段 GDP 最高区域                | FactGDP, DimTime, DimRegion                                  | ✔            | 按 `date_key BETWEEN …` 聚合 SUM(gdp_value) GROUP BY region_id ORDER BY DESC |
-| **1-(2)** 指定区域地理特征                       | FactDemographics                                             | ✔            | 任选日期快照，人口密度 = population / area_km2               |
-| **1-(3)** 区域年度同比                           | FactGDP                                                      | ✔            | `LAG(SUM(gdp_value)) OVER (PARTITION BY region_id ORDER BY year)` |
-| **1-(4)** 区域月度环比                           | FactGDP                                                      | ✔            | `LAG` 按月序号                                               |
-| **1-(5)** 人均 GDP 与排名                        | FactGDP + FactDemographics → Result_PerCapitaGDP_Ranking     | ✔            | 当期人口取 FactDemographics，同步写入结果表                  |
-| **1-(6)** 大区出口贡献率比较                     | FactTrade + FactGDP + Bridge_Region_Group + DimRegionGroup → Result_ExportContribution | ✔            | 先汇总大区出口额与 GDP，再与全国平均比                       |
-| **1-(7)** 20 年中美贸易额 vs GDP                 | FactTrade (USA), FactGDP (全国)                              | ✔            | 汇总全国 region_level=0，partner=USA                         |
-| **2-(1)** 区域出口额占比环比                     | FactTrade                                                    | ✔            | 先计算 `exports / (exports+imports)`，再 `LAG`               |
-| **2-(2)** 特朗普任期中国对美出口环比 vs 全国出口 | FactTrade                                                    | ✔            | 两条子查询后 LEFT JOIN 时间线对比                            |
-| **2-(3)** 连续 4 年出口年增率下降省份            | FactTrade, DimRegion (省级), FactGDP                         | ✔            | 用窗口函数计算 YOY，布尔累积检测；若存在再查 GDP             |
-| **2-(4)** 贸易战前后相似国家比较                 | FactTrade, DimCountry                                        | ✔            | 赛前用相关系数或距离度量选 3 国，再拉同期汇总比对            |
-| **2-(5)** 近十年最大贸易顺差来源国               | FactTrade                                                    | ✔            | 按 partner 求 `SUM(exports-imports)` 排序                    |
+| 查询需求                                               | 所需数据                                                                                | 结构支持情况 | 说明                                                                            |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------- |
+| **1-(1)** 指定时间段 GDP 最高区域                | FactGDP, DimTime, DimRegion                                                             | ✔           | 按 `date_key BETWEEN …` 聚合 SUM(gdp_value) GROUP BY region_id ORDER BY DESC |
+| **1-(2)** 指定区域地理特征                       | FactDemographics                                                                        | ✔           | 任选日期快照，人口密度 = population / area_km2                                  |
+| **1-(3)** 区域年度同比                           | FactGDP                                                                                 | ✔           | `LAG(SUM(gdp_value)) OVER (PARTITION BY region_id ORDER BY year)`             |
+| **1-(4)** 区域月度环比                           | FactGDP                                                                                 | ✔           | `LAG` 按月序号                                                                |
+| **1-(5)** 人均 GDP 与排名                        | FactGDP + FactDemographics → Result_PerCapitaGDP_Ranking                               | ✔           | 当期人口取 FactDemographics，同步写入结果表                                     |
+| **1-(6)** 大区出口贡献率比较                     | FactTrade + FactGDP + Bridge_Region_Group + DimRegionGroup → Result_ExportContribution | ✔           | 先汇总大区出口额与 GDP，再与全国平均比                                          |
+| **1-(7)** 20 年中美贸易额 vs GDP                 | FactTrade (USA), FactGDP (全国)                                                         | ✔           | 汇总全国 region_level=0，partner=USA                                            |
+| **2-(1)** 区域出口额占比环比                     | FactTrade                                                                               | ✔           | 先计算 `exports / (exports+imports)`，再 `LAG`                              |
+| **2-(2)** 特朗普任期中国对美出口环比 vs 全国出口 | FactTrade                                                                               | ✔           | 两条子查询后 LEFT JOIN 时间线对比                                               |
+| **2-(3)** 连续 4 年出口年增率下降省份            | FactTrade, DimRegion (省级), FactGDP                                                    | ✔           | 用窗口函数计算 YOY，布尔累积检测；若存在再查 GDP                                |
+| **2-(4)** 贸易战前后相似国家比较                 | FactTrade, DimCountry                                                                   | ✔           | 赛前用相关系数或距离度量选 3 国，再拉同期汇总比对                               |
+| **2-(5)** 近十年最大贸易顺差来源国               | FactTrade                                                                               | ✔           | 按 partner 求 `SUM(exports-imports)` 排序                                     |
 
 ### 表代码
 
 ```mssql
-CREATE DATABASE TradeGDPAnalytics;
+IF DB_ID(N'TGP') IS NOT NULL
+    DROP DATABASE TGP1;
 GO
-USE TradeGDPAnalytics;
+
+CREATE DATABASE TGP COLLATE Chinese_PRC_CI_AS;
+GO
+USE TGP;
 GO
 
 CREATE TABLE DimTime(
@@ -95,7 +99,10 @@ CREATE TABLE DimTime(
     [year] INT NOT NULL,
     [quarter] TINYINT NOT NULL CHECK([quarter] BETWEEN 1 AND 4),
     [month] TINYINT NOT NULL CHECK([month] BETWEEN 1 AND 12),
-    year_month AS (FORMAT(date_key,'yyyy-MM')) PERSISTED,
+    year_month AS (
+        CAST([year] AS CHAR(4)) + '-' +
+        RIGHT('0' + CAST([month] AS VARCHAR(2)), 2)
+    ) PERSISTED,
     month_start BIT NOT NULL DEFAULT 0
 );
 
@@ -105,7 +112,8 @@ CREATE TABLE DimRegion(
     region_level TINYINT NOT NULL CHECK(region_level BETWEEN 0 AND 5),
     parent_region_id INT NULL REFERENCES DimRegion(region_id)
 );
-CREATE UNIQUE INDEX UX_DimRegion_Name_Level ON DimRegion(region_name,region_level);
+CREATE UNIQUE INDEX UX_DimRegion_Name_Level
+        ON DimRegion(region_name, region_level);
 
 CREATE TABLE DimRegionGroup(
     region_group_id TINYINT PRIMARY KEY,
@@ -115,7 +123,7 @@ CREATE TABLE DimRegionGroup(
 CREATE TABLE Bridge_Region_Group(
     region_id INT NOT NULL REFERENCES DimRegion(region_id),
     region_group_id TINYINT NOT NULL REFERENCES DimRegionGroup(region_group_id),
-    PRIMARY KEY(region_id,region_group_id)
+    PRIMARY KEY(region_id, region_group_id)
 );
 
 CREATE TABLE DimCountry(
@@ -127,18 +135,18 @@ CREATE TABLE FactGDP(
     region_id INT NOT NULL REFERENCES DimRegion(region_id),
     date_key DATE NOT NULL REFERENCES DimTime(date_key),
     gdp_value DECIMAL(18,2) NOT NULL,
-    PRIMARY KEY(region_id,date_key)
+    PRIMARY KEY(region_id, date_key)
 );
-CREATE INDEX IX_FactGDP_DateRegion ON FactGDP(date_key,region_id);
+CREATE INDEX IX_FactGDP_DateRegion ON FactGDP(date_key, region_id);
 
 CREATE TABLE FactDemographics(
     region_id INT NOT NULL REFERENCES DimRegion(region_id),
     date_key DATE NOT NULL REFERENCES DimTime(date_key),
     population BIGINT NOT NULL,
     area_km2 DECIMAL(18,2) NULL,
-    PRIMARY KEY(region_id,date_key)
+    PRIMARY KEY(region_id, date_key)
 );
-CREATE INDEX IX_Demo_DateRegion ON FactDemographics(date_key,region_id);
+CREATE INDEX IX_Demo_DateRegion ON FactDemographics(date_key, region_id);
 
 CREATE TABLE FactTrade(
     region_id INT NOT NULL REFERENCES DimRegion(region_id),
@@ -146,9 +154,10 @@ CREATE TABLE FactTrade(
     date_key DATE NOT NULL REFERENCES DimTime(date_key),
     exports_value DECIMAL(18,2) NULL,
     imports_value DECIMAL(18,2) NULL,
-    PRIMARY KEY(region_id,partner_country_id,date_key)
+    PRIMARY KEY(region_id, partner_country_id, date_key)
 );
-CREATE INDEX IX_Trade_Date_RegionCountry ON FactTrade(date_key,region_id,partner_country_id);
+CREATE INDEX IX_Trade_Date_RegionCountry
+        ON FactTrade(date_key, region_id, partner_country_id);
 
 CREATE TABLE Result_PerCapitaGDP_Ranking(
     analysis_id INT IDENTITY(1,1) PRIMARY KEY,
@@ -168,12 +177,9 @@ CREATE TABLE Result_ExportContribution(
     compare_flag CHAR(1) NOT NULL CHECK(compare_flag IN('>','=','<')),
     created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
 );
-GO
 
 ```
 
 ## 数据收集与处理
-
-
 
 ## 查询语句
