@@ -2,15 +2,12 @@
 -- IF DB_ID(N'TGP') IS NOT NULL
 --     DROP DATABASE TGP1;
 -- GO
-
 -- CREATE DATABASE TGP COLLATE Chinese_PRC_CI_AS;
 -- GO
--- USE TGP;
--- GO
-
+USE TGP;
+GO
 -- CREATE TABLE DimTime(
 --     date_key DATE PRIMARY KEY,
---     [year] INT NOT NULL,
 --     [quarter] TINYINT NOT NULL CHECK([quarter] BETWEEN 1 AND 4),
 --     [month] TINYINT NOT NULL CHECK([month] BETWEEN 1 AND 12),
 --     year_month AS (
@@ -92,397 +89,358 @@
 -- );
 
 -- -- Part2
+
 -- USE TGP;
 -- GO
 
--- -- 1.1 省级年度数据 Staging
--- IF OBJECT_ID('dbo.StagingProvince', 'U') IS NOT NULL
---     DROP TABLE dbo.StagingProvince;
--- GO
--- CREATE TABLE dbo.StagingProvince(
---     年度标识        INT              NULL,
---     省份编码        NVARCHAR(50)     NULL,
---     省份名称        NVARCHAR(100)    NULL,
---     地区生产总值     DECIMAL(18,2)    NULL,
---     人均地区生产总值  DECIMAL(18,2)    NULL,
---     年底人口数       BIGINT           NULL,
---     地区进出口总额    DECIMAL(18,2)    NULL,
---     地区出口总额      DECIMAL(18,2)    NULL,
---     地区进口总额      DECIMAL(18,2)    NULL,
---     外资企业年底注册数量 DECIMAL(18,2) NULL,
---     外资企业投资总额    DECIMAL(18,2) NULL,
---     外资企业注册资本    DECIMAL(18,2) NULL
+-- ;WITH Months AS (
+--     SELECT DISTINCT [月度标识] AS ym
+--     FROM dbo.StagingNationalTradeMonthly
+--     WHERE [月度标识] IS NOT NULL
+-- ), Parsed AS (
+--     SELECT 
+--       EOMONTH(CAST(ym + '-01' AS DATE)) AS dm
+--     FROM Months
+--     -- 可加 TRY_CONVERT 验证格式
+-- )
+-- INSERT INTO dbo.DimTime(date_key, [year], [quarter], [month])
+-- SELECT
+--     dm AS date_key,
+--     YEAR(dm),
+--     DATEPART(QUARTER, dm),
+--     MONTH(dm)
+-- FROM Parsed P
+-- WHERE NOT EXISTS (
+--     SELECT 1 FROM dbo.DimTime DT 
+--     WHERE DT.date_key = P.dm
 -- );
 -- GO
 
--- -- 1.2 地市级年度数据 Staging
--- IF OBJECT_ID('dbo.StagingCity', 'U') IS NOT NULL
---     DROP TABLE dbo.StagingCity;
--- GO
--- CREATE TABLE dbo.StagingCity(
---     年度标识       INT           NULL,
---     城市名称       NVARCHAR(100) NULL,
---     城市代码       NVARCHAR(50)  NULL,
---     省份名称       NVARCHAR(100) NULL,
---     生产总值       DECIMAL(18,2) NULL,
---     年末总人口       BIGINT        NULL,
---     人口密度       DECIMAL(18,2) NULL,
---     外商新签合同数   DECIMAL(18,2) NULL,
---     外商协议投资金额 DECIMAL(18,2) NULL,
---     外商实际投资额   DECIMAL(18,2) NULL
--- );
--- GO
-
--- -- 1.3 县级年度数据 Staging
--- IF OBJECT_ID('dbo.StagingCounty', 'U') IS NOT NULL
---     DROP TABLE dbo.StagingCounty;
--- GO
--- CREATE TABLE dbo.StagingCounty(
---     年度标识    INT           NULL,
---     AreaID     NVARCHAR(50)  NULL,  -- 如果需要可存储，但插入目标表无此列
---     县域名称    NVARCHAR(100) NULL,
---     隶属城市    NVARCHAR(100) NULL,
---     隶属省份    NVARCHAR(100) NULL,
---     土地面积    DECIMAL(18,2) NULL,
---     年末总人口   BIGINT        NULL,
---     地区生产总值  DECIMAL(18,2) NULL
--- );
--- GO
-
--- -- 3.1 插入 DimTime：从三个 Staging 表中收集年度标识
--- ;WITH Years AS (
---     SELECT DISTINCT 年度标识 AS yr FROM dbo.StagingProvince WHERE 年度标识 IS NOT NULL
---     UNION
---     SELECT DISTINCT 年度标识 FROM dbo.StagingCity WHERE 年度标识 IS NOT NULL
---     UNION
---     SELECT DISTINCT 年度标识 FROM dbo.StagingCounty WHERE 年度标识 IS NOT NULL
+-- ;WITH Months AS (
+--     SELECT DISTINCT [月度标识] AS ym
+--     FROM dbo.StagingNationalTradeMonthly
+--     WHERE [月度标识] IS NOT NULL
+-- ), ParsedStart AS (
+--     SELECT CAST(ym + '-01' AS DATE) AS dstart
+--     FROM Months
 -- )
 -- INSERT INTO dbo.DimTime(date_key, [year], [quarter], [month], month_start)
 -- SELECT
---     CAST(CAST(yr AS VARCHAR(4)) + '-12-31' AS DATE) AS date_key,
---     yr AS [year],
---     4 AS [quarter],
---     12 AS [month],
---     0 AS month_start
--- FROM Years Y
+--     dstart,
+--     YEAR(dstart),
+--     DATEPART(QUARTER, dstart),
+--     MONTH(dstart),
+--     1
+-- FROM ParsedStart P
 -- WHERE NOT EXISTS (
---     SELECT 1 FROM dbo.DimTime WHERE date_key = CAST(CAST(Y.yr AS VARCHAR(4)) + '-12-31' AS DATE)
+--     SELECT 1 FROM dbo.DimTime DT 
+--     WHERE DT.date_key = P.dstart
 -- );
-
--- 4.1 确保国家 '中国'
--- IF NOT EXISTS (SELECT 1 FROM dbo.DimRegion WHERE region_name = N'中国' AND region_level = 0)
--- BEGIN
---     INSERT INTO dbo.DimRegion(region_name, region_level, parent_region_id)
---     VALUES (N'中国', 0, NULL);
--- END
--- -- 取中国 region_id
--- DECLARE @ChinaID INT = (SELECT region_id FROM dbo.DimRegion WHERE region_name = N'中国' AND region_level = 0);
-
--- -- 插入省级
--- INSERT INTO dbo.DimRegion(region_name, region_level, parent_region_id)
--- SELECT DISTINCT SP.省份名称, 2, @ChinaID
--- FROM dbo.StagingProvince SP
--- WHERE SP.省份名称 IS NOT NULL
---   AND NOT EXISTS (
---       SELECT 1 FROM dbo.DimRegion DR
---       WHERE DR.region_name = SP.省份名称 AND DR.region_level = 2
---   );
-
---   -- 插入地市级
--- INSERT INTO dbo.DimRegion(region_name, region_level, parent_region_id)
--- SELECT DISTINCT SC.城市名称, 3,
---     PR.region_id
--- FROM dbo.StagingCity SC
--- JOIN dbo.DimRegion PR
---     ON PR.region_name = SC.省份名称 AND PR.region_level = 2
--- WHERE SC.城市名称 IS NOT NULL
---   AND EXISTS (SELECT 1 FROM dbo.DimRegion PR2 WHERE PR2.region_name = SC.省份名称 AND PR2.region_level = 2)
---   AND NOT EXISTS (
---       SELECT 1 FROM dbo.DimRegion DR
---       WHERE DR.region_name = SC.城市名称 AND DR.region_level = 3
---   );
-
---   插入县级
--- INSERT INTO dbo.DimRegion(region_name, region_level, parent_region_id)
--- SELECT DISTINCT SCC.县域名称, 4,
---     CT.region_id
--- FROM dbo.StagingCounty SCC
--- JOIN dbo.DimRegion PR
---     ON PR.region_name = SCC.隶属省份 AND PR.region_level = 2
--- JOIN dbo.DimRegion CT
---     ON CT.region_name = SCC.隶属城市 AND CT.region_level = 3 AND CT.parent_region_id = PR.region_id
--- WHERE SCC.县域名称 IS NOT NULL
---   AND EXISTS (
---       SELECT 1 FROM dbo.DimRegion PR2
---       WHERE PR2.region_name = SCC.隶属省份 AND PR2.region_level = 2
---   )
---   AND EXISTS (
---       SELECT 1 FROM dbo.DimRegion CT2
---       WHERE CT2.region_name = SCC.隶属城市 AND CT2.region_level = 3 AND CT2.parent_region_id = PR.region_id
---   )
---   AND NOT EXISTS (
---       SELECT 1 FROM dbo.DimRegion DR
---       WHERE DR.region_name = SCC.县域名称 AND DR.region_level = 4
---   );
-
---   -- 4.1.1 插入省级 FactGDP
--- INSERT INTO dbo.FactGDP(region_id, date_key, gdp_value)
--- SELECT 
---     PR.region_id,
---     CAST(CAST(SP.年度标识 AS VARCHAR(4)) + '-12-31' AS DATE) AS date_key,
---     SP.地区生产总值
--- FROM dbo.StagingProvince SP
--- JOIN dbo.DimRegion PR
---     ON PR.region_name = SP.省份名称 AND PR.region_level = 2
--- WHERE SP.省份名称 IS NOT NULL
---   AND SP.地区生产总值 IS NOT NULL
---   AND EXISTS (SELECT 1 FROM dbo.DimTime DT WHERE DT.date_key = CAST(CAST(SP.年度标识 AS VARCHAR(4)) + '-12-31' AS DATE))
---   AND NOT EXISTS (
---       SELECT 1 FROM dbo.FactGDP FG
---       WHERE FG.region_id = PR.region_id 
---         AND FG.date_key = CAST(CAST(SP.年度标识 AS VARCHAR(4)) + '-12-31' AS DATE)
---   );
-
--- -- 4.1.2 插入省级 FactDemographics
--- INSERT INTO dbo.FactDemographics(region_id, date_key, population, area_km2)
--- SELECT
---     PR.region_id,
---     CAST(CAST(SP.年度标识 AS VARCHAR(4)) + '-12-31' AS DATE) AS date_key,
---     SP.年底人口数,
---     NULL AS area_km2   -- 省级数据 CSV 中无“面积”字段
--- FROM dbo.StagingProvince SP
--- JOIN dbo.DimRegion PR
---     ON PR.region_name = SP.省份名称 AND PR.region_level = 2
--- WHERE SP.省份名称 IS NOT NULL
---   AND SP.年底人口数 IS NOT NULL  -- 人口若为空则跳过
---   AND NOT EXISTS (
---       SELECT 1 FROM dbo.FactDemographics FD
---       WHERE FD.region_id = PR.region_id 
---         AND FD.date_key = CAST(CAST(SP.年度标识 AS VARCHAR(4)) + '-12-31' AS DATE)
---   );
-
---   -- 4.2.1 插入市级 FactGDP
--- INSERT INTO dbo.FactGDP(region_id, date_key, gdp_value)
--- SELECT
---     CT.region_id,
---     CAST(CAST(SC.年度标识 AS VARCHAR(4)) + '-12-31' AS DATE) AS date_key,
---     SC.生产总值
--- FROM dbo.StagingCity SC
--- JOIN dbo.DimRegion PR
---     ON PR.region_name = SC.省份名称 AND PR.region_level = 2
--- JOIN dbo.DimRegion CT
---     ON CT.region_name = SC.城市名称 AND CT.region_level = 3 AND CT.parent_region_id = PR.region_id
--- WHERE SC.省份名称 IS NOT NULL
---   AND SC.城市名称 IS NOT NULL
---   AND SC.生产总值 IS NOT NULL
---   AND EXISTS (SELECT 1 FROM dbo.DimTime DT WHERE DT.date_key = CAST(CAST(SC.年度标识 AS VARCHAR(4)) + '-12-31' AS DATE))
---   AND NOT EXISTS (
---       SELECT 1 FROM dbo.FactGDP FG
---       WHERE FG.region_id = CT.region_id 
---         AND FG.date_key = CAST(CAST(SC.年度标识 AS VARCHAR(4)) + '-12-31' AS DATE)
---   );
-
--- -- 4.2.2 插入市级 FactDemographics
--- INSERT INTO dbo.FactDemographics(region_id, date_key, population, area_km2)
--- SELECT
---     CT.region_id,
---     CAST(CAST(SC.年度标识 AS VARCHAR(4)) + '-12-31' AS DATE) AS date_key,
---     SC.年末总人口,
---     NULL AS area_km2  -- 如果有市级“面积”可替换此处；当前 CSV 无此字段或缺失严重
--- FROM dbo.StagingCity SC
--- JOIN dbo.DimRegion PR
---     ON PR.region_name = SC.省份名称 AND PR.region_level = 2
--- JOIN dbo.DimRegion CT
---     ON CT.region_name = SC.城市名称 AND CT.region_level = 3 AND CT.parent_region_id = PR.region_id
--- WHERE SC.省份名称 IS NOT NULL
---   AND SC.城市名称 IS NOT NULL
---   AND SC.年末总人口 IS NOT NULL  -- 若为空则跳过
---   AND NOT EXISTS (
---       SELECT 1 FROM dbo.FactDemographics FD
---       WHERE FD.region_id = CT.region_id 
---         AND FD.date_key = CAST(CAST(SC.年度标识 AS VARCHAR(4)) + '-12-31' AS DATE)
---   );
-
---   -- 4.3.1 插入县级 FactGDP
--- INSERT INTO dbo.FactGDP(region_id, date_key, gdp_value)
--- SELECT
---     CTY.region_id,
---     CAST(CAST(SC.年度标识 AS VARCHAR(4)) + '-12-31' AS DATE) AS date_key,
---     SC.地区生产总值
--- FROM dbo.StagingCounty SC
--- JOIN dbo.DimRegion PR
---     ON PR.region_name = SC.隶属省份 AND PR.region_level = 2
--- JOIN dbo.DimRegion CT
---     ON CT.region_name = SC.隶属城市 AND CT.region_level = 3 AND CT.parent_region_id = PR.region_id
--- JOIN dbo.DimRegion CTY
---     ON CTY.region_name = SC.县域名称 AND CTY.region_level = 4 AND CTY.parent_region_id = CT.region_id
--- WHERE SC.隶属省份 IS NOT NULL
---   AND SC.隶属城市 IS NOT NULL
---   AND SC.县域名称 IS NOT NULL
---   AND SC.地区生产总值 IS NOT NULL
---   AND EXISTS (SELECT 1 FROM dbo.DimTime DT WHERE DT.date_key = CAST(CAST(SC.年度标识 AS VARCHAR(4)) + '-12-31' AS DATE))
---   AND NOT EXISTS (
---       SELECT 1 FROM dbo.FactGDP FG
---       WHERE FG.region_id = CTY.region_id 
---         AND FG.date_key = CAST(CAST(SC.年度标识 AS VARCHAR(4)) + '-12-31' AS DATE)
---   );
-
--- -- 4.3.2 插入县级 FactDemographics
--- INSERT INTO dbo.FactDemographics(region_id, date_key, population, area_km2)
--- SELECT
---     CTY.region_id,
---     CAST(CAST(SC.年度标识 AS VARCHAR(4)) + '-12-31' AS DATE) AS date_key,
---     SC.年末总人口,
---     SC.土地面积
--- FROM dbo.StagingCounty SC
--- JOIN dbo.DimRegion PR
---     ON PR.region_name = SC.隶属省份 AND PR.region_level = 2
--- JOIN dbo.DimRegion CT
---     ON CT.region_name = SC.隶属城市 AND CT.region_level = 3 AND CT.parent_region_id = PR.region_id
--- JOIN dbo.DimRegion CTY
---     ON CTY.region_name = SC.县域名称 AND CTY.region_level = 4 AND CTY.parent_region_id = CT.region_id
--- WHERE SC.隶属省份 IS NOT NULL
---   AND SC.隶属城市 IS NOT NULL
---   AND SC.县域名称 IS NOT NULL
---   AND SC.年末总人口 IS NOT NULL   -- 人口若为空就跳过
---   -- 土地面积允许 NULL，如果 SC.土地面积 为空，插入时自动为 NULL
---   AND EXISTS (SELECT 1 FROM dbo.DimTime DT WHERE DT.date_key = CAST(CAST(SC.年度标识 AS VARCHAR(4)) + '-12-31' AS DATE))
---   AND NOT EXISTS (
---       SELECT 1 FROM dbo.FactDemographics FD
---       WHERE FD.region_id = CTY.region_id 
---         AND FD.date_key = CAST(CAST(SC.年度标识 AS VARCHAR(4)) + '-12-31' AS DATE)
---   );
-
--- USE TGP;
 -- GO
 
---   -- 省级区域数量
--- SELECT COUNT(*) AS 省级区域数 FROM DimRegion WHERE region_level = 2;
-
--- -- 地市级区域数量
--- SELECT COUNT(*) AS 地市级区域数 FROM DimRegion WHERE region_level = 3;
-
--- -- 县级区域数量
--- SELECT COUNT(*) AS 县级区域数 FROM DimRegion WHERE region_level = 4;
-
--- -- 某省某年 GDP 插入情况
--- SELECT 
---     PR.region_name, 
---     FG.date_key, 
---     FG.gdp_value
--- FROM DimRegion AS PR
--- LEFT JOIN FactGDP AS FG 
---     ON FG.region_id = PR.region_id
---     AND FG.date_key = '2023-12-31'  -- 指定年份年末日期
--- WHERE 
---     PR.region_level = 2 
---     AND PR.region_name = N'海南省';
-
-
--- -- 某地市人口插入情况
--- SELECT CT.region_name, FD.population, FD.area_km2
--- FROM DimRegion CT
--- LEFT JOIN FactDemographics FD ON FD.region_id = CT.region_id
---     AND FD.date_key = '2023-12-31'
--- WHERE CT.region_level = 3 AND CT.region_name = N'迪庆藏族自治州';
-
-SELECT region_level, COUNT(*) AS cnt
-FROM dbo.DimRegion
-GROUP BY region_level
-ORDER BY region_level;
--- 期望看到 level=0(中国) 1/2/3/4/..数值
-SELECT 
-    SCC.隶属省份, SCC.隶属城市, SCC.县域名称,
-    PR.region_id AS 省ID, CT.region_id AS 市ID
-FROM dbo.StagingCounty AS SCC
-LEFT JOIN dbo.DimRegion AS PR 
-  ON PR.region_name = LTRIM(RTRIM(SCC.隶属省份)) AND PR.region_level = 2
-LEFT JOIN dbo.DimRegion AS CT 
-  ON CT.region_name = LTRIM(RTRIM(SCC.隶属城市)) AND CT.region_level = 3 
-     AND CT.parent_region_id = PR.region_id
-WHERE SCC.隶属省份 IS NOT NULL 
-  AND SCC.隶属城市 IS NOT NULL 
-  AND SCC.县域名称 IS NOT NULL;
-
--- DROP INDEX UX_DimRegion_Name_Level ON dbo.DimRegion;
-
--- CREATE UNIQUE INDEX UX_DimRegion_Name_Level 
---   ON dbo.DimRegion(region_name, region_level, parent_region_id);
-
--- 4.1 确保国家 '中国'
--- IF NOT EXISTS (SELECT 1 FROM dbo.DimRegion WHERE region_name = N'中国' AND region_level = 0)
+-- DECLARE @USID INT;
+-- SELECT @USID = country_id FROM dbo.DimCountry WHERE country_name = N'United States';
+-- IF @USID IS NULL
 -- BEGIN
---     INSERT INTO dbo.DimRegion(region_name, region_level, parent_region_id)
---     VALUES (N'中国', 0, NULL);
+--     INSERT INTO dbo.DimCountry(country_name) VALUES (N'United States');
+--     SET @USID = SCOPE_IDENTITY();
 -- END
--- -- 取中国 region_id
--- DECLARE @ChinaID INT = (SELECT region_id FROM dbo.DimRegion WHERE region_name = N'中国' AND region_level = 0);
+
+-- DECLARE @AllID INT;
+-- SELECT @AllID = country_id FROM dbo.DimCountry WHERE country_name = N'ALL';
+-- IF @AllID IS NULL
+-- BEGIN
+--     INSERT INTO dbo.DimCountry(country_name) VALUES (N'ALL');
+--     SET @AllID = SCOPE_IDENTITY();
+-- END
+-- GO
+
+-- DECLARE @ChinaID INT = (SELECT region_id FROM dbo.DimRegion WHERE region_name=N'中国' AND region_level=0);
+-- IF @ChinaID IS NULL
+-- BEGIN
+--     RAISERROR('DimRegion 中缺少 中国 记录，请先插入。', 16, 1);
+--     RETURN;
+-- END
+-- DECLARE @USID INT = (SELECT country_id FROM dbo.DimCountry WHERE country_name=N'United States');
+
+-- INSERT INTO dbo.FactUSTradeAnnual(region_id, partner_country_id, date_key, category_id, export_value, import_value)
+-- SELECT
+--     @ChinaID AS region_id,
+--     @USID AS partner_country_id,
+--     DT.date_key,
+--     DC.category_id,
+--     S.[出口_亿美元],
+--     S.[进口_亿美元]
+-- FROM dbo.StagingUSTradeAnnual AS S
+-- JOIN dbo.DimCategory AS DC
+--   ON DC.category_name = LTRIM(RTRIM(S.[商品分类]))
+-- JOIN dbo.DimTime AS DT
+--   ON DT.date_key = CAST(CAST(S.[年份] AS VARCHAR(4)) + '-12-31' AS DATE)
+-- WHERE S.[商品分类] IS NOT NULL
+--   AND S.[年份] IS NOT NULL
+--   AND NOT EXISTS (
+--       SELECT 1 FROM dbo.FactUSTradeAnnual F
+--       WHERE F.region_id=@ChinaID 
+--         AND F.partner_country_id=@USID
+--         AND F.date_key=DT.date_key
+--         AND F.category_id=DC.category_id
+--   );
+-- GO
+
+-- DECLARE @ChinaID INT = (SELECT region_id FROM dbo.DimRegion WHERE region_name=N'中国' AND region_level=0);
+-- DECLARE @AllID INT   = (SELECT country_id FROM dbo.DimCountry WHERE country_name=N'ALL');
+
+-- INSERT INTO dbo.FactTrade(region_id, partner_country_id, date_key, exports_value, imports_value)
+-- SELECT
+--     @ChinaID,
+--     @AllID,
+--     DT.date_key,
+--     S.[当月出口总额],
+--     S.[当月进口总额]
+-- FROM dbo.StagingNationalTradeMonthly AS S
+-- JOIN dbo.DimTime AS DT
+--   ON DT.date_key = EOMONTH(CAST(S.[月度标识] + '-01' AS DATE))
+-- WHERE S.[月度标识] IS NOT NULL
+--   AND NOT EXISTS (
+--     SELECT 1 FROM dbo.FactTrade F
+--     WHERE F.region_id=@ChinaID 
+--       AND F.partner_country_id=@AllID
+--       AND F.date_key=DT.date_key
+--   );
+-- GO
+-- DECLARE @ChinaID INT = (SELECT region_id FROM dbo.DimRegion WHERE region_name=N'中国' AND region_level=0);
+-- DECLARE @AllID INT = (SELECT country_id FROM dbo.DimCountry WHERE country_name=N'ALL');
+-- -- 全国月度进出口环比增长率（出口占比环比、出口同比等）
+-- WITH Monthly AS (
+--   SELECT 
+--     DT.date_key,
+--     DT.year_month,
+--     F.exports_value,
+--     F.imports_value,
+--     F.exports_value - LAG(F.exports_value) OVER(ORDER BY DT.date_key) AS diff_exports,
+--     LAG(F.exports_value) OVER(ORDER BY DT.date_key) AS prev_exports,
+--     F.imports_value - LAG(F.imports_value) OVER(ORDER BY DT.date_key) AS diff_imports,
+--     LAG(F.imports_value) OVER(ORDER BY DT.date_key) AS prev_imports
+--   FROM dbo.FactTrade AS F
+--   JOIN dbo.DimTime AS DT ON F.date_key = DT.date_key
+--   WHERE F.region_id = @ChinaID AND F.partner_country_id = @AllID
+-- )
+
+-- SELECT 
+--   year_month,
+--   exports_value,
+--   CASE 
+--     WHEN prev_exports IS NULL OR prev_exports = 0 THEN NULL
+--     ELSE diff_exports * 1.0 / prev_exports 
+--   END AS exports_mom_growth,  -- 月度环比增长率
+--   CASE 
+--     WHEN LAG(exports_value, 12) OVER(ORDER BY date_key) IS NOT NULL 
+--          AND LAG(exports_value, 12) OVER(ORDER BY date_key) <> 0 
+--     THEN (exports_value - LAG(exports_value,12) OVER(ORDER BY date_key)) *1.0 
+--          / LAG(exports_value,12) OVER(ORDER BY date_key) 
+--     ELSE NULL 
+--   END AS exports_yoy_growth,  -- 月度同比增长率
+--   imports_value,
+--   CASE 
+--     WHEN prev_imports IS NULL OR prev_imports = 0 THEN NULL
+--     ELSE diff_imports * 1.0 / prev_imports 
+--   END AS imports_mom_growth,
+--   CASE 
+--     WHEN LAG(imports_value,12) OVER(ORDER BY date_key) IS NOT NULL 
+--          AND LAG(imports_value,12) OVER(ORDER BY date_key) <> 0 
+--     THEN (imports_value - LAG(imports_value,12) OVER(ORDER BY date_key)) *1.0 
+--          / LAG(imports_value,12) OVER(ORDER BY date_key) 
+--     ELSE NULL 
+--   END AS imports_yoy_growth
+-- FROM Monthly
+-- ORDER BY date_key;
 
 
--- -- 省级（parent_region_id = 中国ID）
--- INSERT INTO dbo.DimRegion(region_name, region_level, parent_region_id)
--- SELECT DISTINCT LTRIM(RTRIM(SP.省份名称)), 2, @ChinaID
--- FROM dbo.StagingProvince AS SP
--- WHERE SP.省份名称 IS NOT NULL
---   AND NOT EXISTS (
---       SELECT 1 
---       FROM dbo.DimRegion DR
---       WHERE DR.region_level = 2
---         AND DR.region_name = LTRIM(RTRIM(SP.省份名称))
---         AND DR.parent_region_id = @ChinaID
---   );
+-- -- 1.1查询指定时间段GDP最高的区域
+-- SELECT TOP 1 DR.region_name, SUM(FG.gdp_value) AS total_gdp
+-- FROM dbo.FactGDP FG
+-- JOIN dbo.DimRegion DR ON FG.region_id = DR.region_id
+-- WHERE FG.date_key BETWEEN '2023-01-31' AND '2023-12-31'
+--   AND DR.region_level = 2
+-- GROUP BY DR.region_name
+-- ORDER BY total_gdp DESC;
 
--- -- 市级（parent_region_id = 对应省ID）
--- INSERT INTO dbo.DimRegion(region_name, region_level, parent_region_id)
--- SELECT DISTINCT LTRIM(RTRIM(SC.城市名称)), 3, PR.region_id
--- FROM dbo.StagingCity AS SC
--- JOIN dbo.DimRegion AS PR
---   ON PR.region_name = LTRIM(RTRIM(SC.省份名称)) 
---  AND PR.region_level = 2
--- WHERE SC.城市名称 IS NOT NULL
---   AND NOT EXISTS (
---       SELECT 1 
---       FROM dbo.DimRegion DR
---       WHERE DR.region_level = 3
---         AND DR.region_name = LTRIM(RTRIM(SC.城市名称))
---         AND DR.parent_region_id = PR.region_id
---   );
--- -- 县级（parent_region_id = 对应市ID）
--- INSERT INTO dbo.DimRegion(region_name, region_level, parent_region_id)
--- SELECT DISTINCT LTRIM(RTRIM(SCC.县域名称)), 4, CT.region_id
--- FROM dbo.StagingCounty AS SCC
--- JOIN dbo.DimRegion AS PR
---   ON PR.region_name = LTRIM(RTRIM(SCC.隶属省份)) AND PR.region_level = 2
--- JOIN dbo.DimRegion AS CT
---   ON CT.region_name = LTRIM(RTRIM(SCC.隶属城市)) AND CT.region_level = 3 
---  AND CT.parent_region_id = PR.region_id
--- WHERE SCC.隶属省份 IS NOT NULL
---   AND SCC.隶属城市 IS NOT NULL
---   AND SCC.县域名称 IS NOT NULL
---   AND NOT EXISTS (
---       SELECT 1 
---       FROM dbo.DimRegion DR
---       WHERE DR.region_level = 4
---         AND DR.region_name = LTRIM(RTRIM(SCC.县域名称))
---         AND DR.parent_region_id = CT.region_id
---   );
--- INSERT INTO dbo.DimRegion(region_name, region_level, parent_region_id)
--- SELECT DISTINCT 
---     LTRIM(RTRIM(SCC.县域名称)), 
---     4, 
---     CT.region_id
--- FROM dbo.StagingCounty AS SCC
--- JOIN dbo.DimRegion AS PR 
---   ON PR.region_name = LTRIM(RTRIM(SCC.隶属省份)) AND PR.region_level = 2
--- JOIN dbo.DimRegion AS CT 
---   ON CT.region_name = LTRIM(RTRIM(SCC.隶属城市)) AND CT.region_level = 3 
---      AND CT.parent_region_id = PR.region_id
--- WHERE SCC.隶属省份 IS NOT NULL 
---   AND SCC.隶属城市 IS NOT NULL 
---   AND SCC.县域名称 IS NOT NULL
---   AND NOT EXISTS (
---       SELECT 1 FROM dbo.DimRegion DR 
---       WHERE DR.region_name = LTRIM(RTRIM(SCC.县域名称)) 
---         AND DR.region_level = 4 
---         AND DR.parent_region_id = CT.region_id
---   );
+-- -- 1.2查询指定区域的地理特征，包括区域面积大小、人口数量、人口密度，等等
+-- SELECT DR.region_name, 
+--        FD.area_km2, 
+--        FD.population, 
+--        CAST(FD.population * 1.0 / NULLIF(FD.area_km2, 0) AS DECIMAL(18,2)) AS population_density
+-- FROM dbo.FactDemographics FD
+-- JOIN dbo.DimRegion DR ON FD.region_id = DR.region_id
+-- WHERE DR.region_name = N'重庆市'
+--   AND FD.date_key = '2023-12-31';
+
+
+-- -- 1.3查询一个区域指定年份的生产总值同比增长率
+-- WITH gdp_cte AS (
+--     SELECT
+--         r.region_name,
+--         t.year,
+--         SUM(g.gdp_value) AS total_gdp
+--     FROM dbo.FactGDP g
+--     JOIN dbo.DimRegion r ON g.region_id = r.region_id
+--     JOIN dbo.DimTime t ON g.date_key = t.date_key
+--     WHERE r.region_name = N'重庆市'
+--       AND t.year IN (2009, 2010)
+--     GROUP BY r.region_name, t.year
+-- )
+-- SELECT
+--     MAX(CASE WHEN year = 2009 THEN total_gdp END) AS gdp_2009,
+--     MAX(CASE WHEN year = 2010 THEN total_gdp END) AS gdp_2010,
+--     (MAX(CASE WHEN year = 2010 THEN total_gdp END) - MAX(CASE WHEN year = 2009 THEN total_gdp END)) * 100.0 /
+--     MAX(CASE WHEN year = 2009 THEN total_gdp END) AS yoy_growth_rate
+-- FROM gdp_cte;
+
+-- -- 1.4查询在指定时间段的某个区域的生产总值环比增长率。
+-- WITH monthly_gdp AS (
+--     SELECT
+--         t.year_month,
+--         t.date_key,
+--         SUM(f.gdp_value) AS total_gdp,
+--         ROW_NUMBER() OVER (ORDER BY t.date_key) AS rn
+--     FROM dbo.FactGDP f
+--     JOIN dbo.DimTime t ON f.date_key = t.date_key
+--     JOIN dbo.DimRegion r ON f.region_id = r.region_id
+--     WHERE r.region_name = N'重庆市'
+--     GROUP BY t.date_key, t.year_month
+--     HAVING t.date_key BETWEEN '2022-01-31' AND '2023-12-31'
+-- ),
+-- joined AS (
+--     SELECT
+--         curr.year_month AS curr_month,
+--         prev.total_gdp AS prev_gdp,
+--         curr.total_gdp AS curr_gdp,
+--         (curr.total_gdp - prev.total_gdp) * 100.0 / NULLIF(prev.total_gdp, 0) AS mom_growth
+--     FROM monthly_gdp curr
+--     JOIN monthly_gdp prev ON curr.rn = prev.rn + 1
+-- )
+-- SELECT * FROM joined;
+
+-- -- 1.5查询指定时间段各区域的人均GDP值和排名，并且将结果存储在数据库中。
+-- WITH per_capita AS (
+--     SELECT
+--         f.region_id,
+--         f.date_key,
+--         SUM(f.gdp_value) / NULLIF(MAX(d.population), 0) AS per_capita_gdp
+--     FROM dbo.FactGDP f
+--     JOIN dbo.FactDemographics d ON f.region_id = d.region_id AND f.date_key = d.date_key
+--     WHERE f.date_key = '2020-12-31'
+--     GROUP BY f.region_id, f.date_key
+-- ),
+-- ranked AS (
+--     SELECT *,
+--         RANK() OVER (ORDER BY per_capita_gdp DESC) AS rank_in_date
+--     FROM per_capita
+-- )
+-- INSERT INTO dbo.Result_PerCapitaGDP_Ranking(region_id, date_key, per_capita_gdp, rank_in_date)
+-- SELECT
+--     region_id,
+--     date_key,
+--     per_capita_gdp,
+--     rank_in_date
+-- FROM ranked;
+
+
+-- -- 1.6 分析比较指定时间段我国东部、西部、中部、东北部地区出口对该区域GDP的贡献率，以及判断贡献率是高于全国平均值，还是等于或低于平均值。将结果存储在数据库中。
+-- DECLARE @from_date DATE = '2010-01-01';
+-- DECLARE @to_date DATE = '2020-12-31';
+
+-- -- 第一步：全国 GDP 与 出口总额
+-- WITH NationalTotal AS (
+--     SELECT
+--         SUM(g.gdp_value) AS total_gdp,
+--         SUM(t.exports_value) AS total_exports
+--     FROM dbo.FactGDP g
+--     JOIN dbo.FactTrade t ON g.region_id = t.region_id AND g.date_key = t.date_key
+--     WHERE t.date_key BETWEEN @from_date AND @to_date
+-- ),
+-- AvgContribution AS (
+--     SELECT
+--         CAST(total_exports AS FLOAT) / NULLIF(total_gdp, 0) AS avg_contribution
+--     FROM NationalTotal
+-- ),
+
+-- -- 第二步：每个大区的 GDP 与 出口总额（通过省份汇总）
+-- RegionGroupTotal AS (
+--     SELECT
+--         brg.region_group_id,
+--         SUM(g.gdp_value) AS total_gdp,
+--         SUM(t.exports_value) AS total_exports
+--     FROM dbo.DimRegion r
+--     JOIN dbo.Bridge_Region_Group brg ON r.region_id = brg.region_id
+--     JOIN dbo.FactGDP g ON g.region_id = r.region_id
+--     JOIN dbo.FactTrade t ON t.region_id = r.region_id AND t.date_key = g.date_key
+--     WHERE r.region_level = 2  -- 只聚合省级单位
+--       AND t.date_key BETWEEN @from_date AND @to_date
+--     GROUP BY brg.region_group_id
+-- )
+
+-- -- 第三步：插入分析结果
+-- INSERT INTO dbo.Result_ExportContribution (
+--     region_group_id, date_from, date_to, contribution, compare_flag, created_at
+-- )
+-- SELECT
+--     r.region_group_id,
+--     @from_date,
+--     @to_date,
+--     CAST(r.total_exports AS FLOAT) / NULLIF(r.total_gdp, 0) AS contribution,
+--     CASE
+--         WHEN CAST(r.total_exports AS FLOAT) / NULLIF(r.total_gdp, 0) > a.avg_contribution THEN '>'
+--         WHEN CAST(r.total_exports AS FLOAT) / NULLIF(r.total_gdp, 0) = a.avg_contribution THEN '='
+--         ELSE '<'
+--     END AS compare_flag,
+--     SYSUTCDATETIME()
+-- FROM RegionGroupTotal r
+-- CROSS JOIN AvgContribution a;
+
+-- 1.7 比较最近二十年中美贸易总额增长率变化趋势与我国GDP变化趋势。
+-- 步骤：先按年汇总中美贸易总额与全国 GDP
+-- 提取 2004–2023 每年中国对美国的进出口总额（贸易总额）；
+-- 提取 2004–2023 每年全国 GDP 总额；
+-- 计算这两个指标的同比增长率；
+-- 并列输出用于趋势对比。
+-- WITH YearlyUSATrade AS (
+--     SELECT
+--         t1.year,
+--         SUM(f.exports_value + f.imports_value) AS usa_trade_total
+--     FROM dbo.FactTrade f
+--     JOIN dbo.DimTime t1 ON f.date_key = t1.date_key
+--     WHERE f.partner_country_id = 1
+--       AND t1.year BETWEEN 2004 AND 2023
+--     GROUP BY t1.year
+-- ),
+-- YearlyGDP AS (
+--     SELECT
+--         t2.year,
+--         SUM(g.gdp_value) AS china_gdp_total
+--     FROM dbo.FactGDP g
+--     JOIN dbo.DimTime t2 ON g.date_key = t2.date_key
+--     WHERE g.region_id = 1
+--       AND t2.year BETWEEN 2004 AND 2023
+--     GROUP BY t2.year
+-- ),
+-- Combined AS (
+--     SELECT
+--         t.year,
+--         t.usa_trade_total,
+--         g.china_gdp_total,
+--         LAG(t.usa_trade_total) OVER (ORDER BY t.year) AS prev_trade,
+--         LAG(g.china_gdp_total) OVER (ORDER BY t.year) AS prev_gdp
+--     FROM YearlyUSATrade t
+--     JOIN YearlyGDP g ON t.year = g.year
+-- )
+-- -- 输出增长率对比
+-- SELECT
+--     year,
+--     usa_trade_total,
+--     china_gdp_total,
+--     ROUND((usa_trade_total - prev_trade) * 100.0 / NULLIF(prev_trade, 0), 2) AS usa_trade_yoy,
+--     ROUND((china_gdp_total - prev_gdp) * 100.0 / NULLIF(prev_gdp, 0), 2) AS gdp_yoy
+-- FROM Combined
+-- ORDER BY year;
+
