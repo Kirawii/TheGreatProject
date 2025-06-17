@@ -256,70 +256,70 @@ GO
 -- ORDER BY date_key;
 
 
--- -- 1.1查询指定时间段GDP最高的区域
--- SELECT TOP 1 DR.region_name, SUM(FG.gdp_value) AS total_gdp
--- FROM dbo.FactGDP FG
--- JOIN dbo.DimRegion DR ON FG.region_id = DR.region_id
--- WHERE FG.date_key BETWEEN '2023-01-31' AND '2023-12-31'
---   AND DR.region_level = 2
--- GROUP BY DR.region_name
--- ORDER BY total_gdp DESC;
+-- 1.1查询指定时间段GDP最高的区域
+SELECT TOP 1 DR.region_name, SUM(FG.gdp_value) AS total_gdp
+FROM dbo.FactGDP FG
+JOIN dbo.DimRegion DR ON FG.region_id = DR.region_id
+WHERE FG.date_key BETWEEN '2023-01-31' AND '2023-12-31'
+  AND DR.region_level = 2
+GROUP BY DR.region_name
+ORDER BY total_gdp DESC;
 
--- -- 1.2查询指定区域的地理特征，包括区域面积大小、人口数量、人口密度，等等
--- SELECT DR.region_name, 
---        FD.area_km2, 
---        FD.population, 
---        CAST(FD.population * 1.0 / NULLIF(FD.area_km2, 0) AS DECIMAL(18,2)) AS population_density
--- FROM dbo.FactDemographics FD
--- JOIN dbo.DimRegion DR ON FD.region_id = DR.region_id
--- WHERE DR.region_name = N'重庆市'
---   AND FD.date_key = '2023-12-31';
+-- 1.2查询指定区域的地理特征，包括区域面积大小、人口数量、人口密度，等等
+SELECT DR.region_name, 
+       FD.area_km2, 
+       FD.population, 
+       CAST(FD.population * 1.0 / NULLIF(FD.area_km2, 0) AS DECIMAL(18,2)) AS population_density
+FROM dbo.FactDemographics FD
+JOIN dbo.DimRegion DR ON FD.region_id = DR.region_id
+WHERE DR.region_name = N'重庆市'
+  AND FD.date_key = '2023-12-31';
 
 
--- -- 1.3查询一个区域指定年份的生产总值同比增长率
--- WITH gdp_cte AS (
---     SELECT
---         r.region_name,
---         t.year,
---         SUM(g.gdp_value) AS total_gdp
---     FROM dbo.FactGDP g
---     JOIN dbo.DimRegion r ON g.region_id = r.region_id
---     JOIN dbo.DimTime t ON g.date_key = t.date_key
---     WHERE r.region_name = N'重庆市'
---       AND t.year IN (2009, 2010)
---     GROUP BY r.region_name, t.year
--- )
--- SELECT
---     MAX(CASE WHEN year = 2009 THEN total_gdp END) AS gdp_2009,
---     MAX(CASE WHEN year = 2010 THEN total_gdp END) AS gdp_2010,
---     (MAX(CASE WHEN year = 2010 THEN total_gdp END) - MAX(CASE WHEN year = 2009 THEN total_gdp END)) * 100.0 /
---     MAX(CASE WHEN year = 2009 THEN total_gdp END) AS yoy_growth_rate
--- FROM gdp_cte;
+-- 1.3查询一个区域指定年份的生产总值同比增长率
+WITH gdp_cte AS (
+    SELECT
+        r.region_name,
+        t.year,
+        SUM(g.gdp_value) AS total_gdp
+    FROM dbo.FactGDP g
+    JOIN dbo.DimRegion r ON g.region_id = r.region_id
+    JOIN dbo.DimTime t ON g.date_key = t.date_key
+    WHERE r.region_name = N'重庆市'
+      AND t.year IN (2009, 2010)
+    GROUP BY r.region_name, t.year
+)
+SELECT
+    MAX(CASE WHEN year = 2009 THEN total_gdp END) AS gdp_2009,
+    MAX(CASE WHEN year = 2010 THEN total_gdp END) AS gdp_2010,
+    (MAX(CASE WHEN year = 2010 THEN total_gdp END) - MAX(CASE WHEN year = 2009 THEN total_gdp END)) * 100.0 /
+    MAX(CASE WHEN year = 2009 THEN total_gdp END) AS yoy_growth_rate
+FROM gdp_cte;
 
--- -- 1.4查询在指定时间段的某个区域的生产总值环比增长率。
--- WITH monthly_gdp AS (
---     SELECT
---         t.year_month,
---         t.date_key,
---         SUM(f.gdp_value) AS total_gdp,
---         ROW_NUMBER() OVER (ORDER BY t.date_key) AS rn
---     FROM dbo.FactGDP f
---     JOIN dbo.DimTime t ON f.date_key = t.date_key
---     JOIN dbo.DimRegion r ON f.region_id = r.region_id
---     WHERE r.region_name = N'重庆市'
---     GROUP BY t.date_key, t.year_month
---     HAVING t.date_key BETWEEN '2022-01-31' AND '2023-12-31'
--- ),
--- joined AS (
---     SELECT
---         curr.year_month AS curr_month,
---         prev.total_gdp AS prev_gdp,
---         curr.total_gdp AS curr_gdp,
---         (curr.total_gdp - prev.total_gdp) * 100.0 / NULLIF(prev.total_gdp, 0) AS mom_growth
---     FROM monthly_gdp curr
---     JOIN monthly_gdp prev ON curr.rn = prev.rn + 1
--- )
--- SELECT * FROM joined;
+-- 1.4查询在指定时间段的某个区域的生产总值环比增长率。
+WITH monthly_gdp AS (
+    SELECT
+        t.year_month,
+        t.date_key,
+        SUM(f.gdp_value) AS total_gdp,
+        ROW_NUMBER() OVER (ORDER BY t.date_key) AS rn
+    FROM dbo.FactGDP f
+    JOIN dbo.DimTime t ON f.date_key = t.date_key
+    JOIN dbo.DimRegion r ON f.region_id = r.region_id
+    WHERE r.region_name = N'重庆市'
+    GROUP BY t.date_key, t.year_month
+    HAVING t.date_key BETWEEN '2022-01-31' AND '2023-12-31'
+),
+joined AS (
+    SELECT
+        curr.year_month AS curr_month,
+        prev.total_gdp AS prev_gdp,
+        curr.total_gdp AS curr_gdp,
+        (curr.total_gdp - prev.total_gdp) * 100.0 / NULLIF(prev.total_gdp, 0) AS mom_growth
+    FROM monthly_gdp curr
+    JOIN monthly_gdp prev ON curr.rn = prev.rn + 1
+)
+SELECT * FROM joined;
 
 -- -- 1.5查询指定时间段各区域的人均GDP值和排名，并且将结果存储在数据库中。
 -- WITH per_capita AS (
@@ -404,241 +404,302 @@ GO
 -- 提取 2004–2023 每年全国 GDP 总额；
 -- 计算这两个指标的同比增长率；
 -- 并列输出用于趋势对比。
--- WITH YearlyUSATrade AS (
---     SELECT
---         t1.year,
---         SUM(f.exports_value + f.imports_value) AS usa_trade_total
---     FROM dbo.FactTrade f
---     JOIN dbo.DimTime t1 ON f.date_key = t1.date_key
---     WHERE f.partner_country_id = 1
---       AND t1.year BETWEEN 2004 AND 2023
---     GROUP BY t1.year
--- ),
--- YearlyGDP AS (
---     SELECT
---         t2.year,
---         SUM(g.gdp_value) AS china_gdp_total
---     FROM dbo.FactGDP g
---     JOIN dbo.DimTime t2 ON g.date_key = t2.date_key
---     WHERE g.region_id = 1
---       AND t2.year BETWEEN 2004 AND 2023
---     GROUP BY t2.year
--- ),
--- Combined AS (
---     SELECT
---         t.year,
---         t.usa_trade_total,
---         g.china_gdp_total,
---         LAG(t.usa_trade_total) OVER (ORDER BY t.year) AS prev_trade,
---         LAG(g.china_gdp_total) OVER (ORDER BY t.year) AS prev_gdp
---     FROM YearlyUSATrade t
---     JOIN YearlyGDP g ON t.year = g.year
--- )
--- -- 输出增长率对比
+WITH YearlyUSATrade AS (
+    SELECT
+        t1.year,
+        SUM(f.exports_value + f.imports_value) AS usa_trade_total
+    FROM dbo.FactTrade f
+    JOIN dbo.DimTime t1 ON f.date_key = t1.date_key
+    WHERE f.partner_country_id = 1
+    GROUP BY t1.year
+),
+YearlyGDP AS (
+    SELECT
+        t2.year,
+        SUM(g.gdp_value) AS china_gdp_total
+    FROM dbo.FactGDP g
+    JOIN dbo.DimTime t2 ON g.date_key = t2.date_key
+    WHERE g.region_id = 1
+      AND t2.year BETWEEN 2004 AND 2023
+    GROUP BY t2.year
+),
+Combined AS (
+    SELECT
+        t.year,
+        t.usa_trade_total,
+        g.china_gdp_total,
+        LAG(t.usa_trade_total) OVER (ORDER BY t.year) AS prev_trade,
+        LAG(g.china_gdp_total) OVER (ORDER BY t.year) AS prev_gdp
+    FROM YearlyUSATrade t
+    JOIN YearlyGDP g ON t.year = g.year
+)
+-- 输出增长率对比
+SELECT
+    year,
+    usa_trade_total,
+    china_gdp_total,
+    ROUND((usa_trade_total - prev_trade) * 100.0 / NULLIF(prev_trade, 0), 2) AS usa_trade_yoy,
+    ROUND((china_gdp_total - prev_gdp) * 100.0 / NULLIF(prev_gdp, 0), 2) AS gdp_yoy
+FROM Combined
+ORDER BY year;
+
+-- (1)  查询在指定时间段指定区域的出口额在其进出口总额占比的月度环比增长率。
+WITH TradeRatio AS (
+    SELECT
+        t.date_key,
+        FORMAT(t.date_key, 'yyyy-MM') AS year_month,
+        SUM(t.exports_value) AS exports,
+        SUM(t.exports_value + t.imports_value) AS total_trade,
+        SUM(t.exports_value) * 1.0 / NULLIF(SUM(t.exports_value + t.imports_value), 0) AS export_ratio
+    FROM dbo.FactTrade t
+    WHERE t.region_id = 1
+      AND t.date_key BETWEEN '2010-01-01' AND '2015-12-31'
+    GROUP BY t.date_key
+),
+RatioWithLag AS (
+    SELECT
+        year_month,
+        export_ratio,
+        LAG(export_ratio) OVER (ORDER BY year_month) AS prev_ratio
+    FROM TradeRatio
+)
+SELECT
+    year_month,
+    export_ratio,
+    ROUND((export_ratio - prev_ratio) * 100.0, 2) AS mom_growth_pct
+FROM RatioWithLag
+WHERE prev_ratio IS NOT NULL;
+
+-- (2)  查询分析在特朗普执政的第一个任期中美贸易战爆发当年，比较中国向美国出口额月度环比变化趋势与中国对外出口总额的变化趋势。
+-- 中国全国对美国出口（region_id = 1）
+WITH CN_US AS (
+    SELECT
+        t.date_key,
+        FORMAT(t.date_key, 'yyyy-MM') AS ym,
+        SUM(t.exports_value) AS cn_to_us
+    FROM dbo.FactTrade t
+    WHERE t.region_id = 1
+      AND t.partner_country_id = 1  -- 对美国
+      AND t.date_key BETWEEN '2018-01-01' AND '2018-12-31'
+    GROUP BY t.date_key
+),
+
+-- 中国所有省份对世界（非美国）出口
+CN_ALL_WORLD AS (
+    SELECT
+        t.date_key,
+        FORMAT(t.date_key, 'yyyy-MM') AS ym,
+        SUM(t.exports_value) AS cn_province_to_world
+    FROM dbo.FactTrade t
+    JOIN dbo.DimRegion r ON t.region_id = r.region_id
+    WHERE r.region_level = 2             -- 省级
+      AND t.partner_country_id <> 1      -- 非美国
+      AND t.date_key BETWEEN '2018-01-01' AND '2018-12-31'
+    GROUP BY t.date_key
+),
+
+-- 拼接对比
+Combined AS (
+    SELECT
+        us.ym,
+        us.cn_to_us,
+        world.cn_province_to_world,
+        LAG(us.cn_to_us) OVER (ORDER BY us.ym) AS prev_us,
+        LAG(world.cn_province_to_world) OVER (ORDER BY world.ym) AS prev_world
+    FROM CN_US us
+    JOIN CN_ALL_WORLD world ON us.ym = world.ym
+)
+
+-- 输出结果
+SELECT
+    ym,
+    ROUND((cn_to_us - prev_us) * 100.0 / NULLIF(prev_us, 0), 2) AS us_export_mom_pct,
+    ROUND((cn_province_to_world - prev_world) * 100.0 / NULLIF(prev_world, 0), 2) AS world_export_mom_pct
+FROM Combined
+WHERE prev_us IS NOT NULL AND prev_world IS NOT NULL
+ORDER BY ym;
+
+
+
+-- (3) 在特朗普执政第一个任期中，我国是否存在省份或直辖市出口总额年增长率持续下降？若有，查询分析该地区在这个时期的GDP年增长变化，否则提示“在这四年中，没有任何省份或直辖市出口总额年增长率都持续下降”。
+-- 获取每省每年出口总额
+WITH AnnualExport AS (
+    SELECT
+        r.region_id,
+        t.year,
+        SUM(f.exports_value) AS total_exports
+    FROM dbo.FactTrade f
+    JOIN dbo.DimTime t ON f.date_key = t.date_key
+    JOIN dbo.DimRegion r ON f.region_id = r.region_id
+    WHERE r.region_level = 2 AND t.year BETWEEN 2016 AND 2020
+    GROUP BY r.region_id, t.year
+),
+ExportGrowth AS (
+    SELECT
+        region_id,
+        year,
+        total_exports,
+        LAG(total_exports) OVER (PARTITION BY region_id ORDER BY year) AS prev_exports
+    FROM AnnualExport
+),
+ExportDeclineFlag AS (
+    SELECT
+        region_id,
+        year,
+        CASE
+            WHEN total_exports < prev_exports THEN 1 ELSE 0
+        END AS is_decline
+    FROM ExportGrowth
+    WHERE prev_exports IS NOT NULL
+),
+DeclineRegion AS (
+    SELECT region_id
+    FROM ExportDeclineFlag
+    GROUP BY region_id
+    HAVING COUNT(*) = 4  -- 4年连续下降
+)
+-- 若存在则查询GDP变化，否则提示
+SELECT
+    t.year,
+    r.region_name,
+    SUM(g.gdp_value) AS total_gdp
+FROM dbo.FactGDP g
+JOIN dbo.DimTime t ON g.date_key = t.date_key
+JOIN dbo.DimRegion r ON g.region_id = r.region_id
+WHERE r.region_id IN (SELECT region_id FROM DeclineRegion)
+  AND t.year BETWEEN 2017 AND 2020
+GROUP BY t.year, r.region_name
+ORDER BY r.region_name, t.year;
+
+
+
+-- (4)  查询分析在特朗普第一个任期中美贸易冲突发生前，与我国贸易总额变化趋势与美国最相似的三个国家，分析比较贸易战爆发后，他们与我国贸易额和美国与我国贸易额的变化趋势。
+-- 步骤1：2015~2017 各国年度贸易额
+WITH CNPartnerTrade AS (
+    SELECT
+        f.partner_country_id,
+        t.year,
+        SUM(f.exports_value + f.imports_value) AS trade_amount
+    FROM dbo.FactTrade f
+    JOIN dbo.DimTime t ON f.date_key = t.date_key
+    WHERE t.year BETWEEN 2015 AND 2017 AND f.region_id = 1
+    GROUP BY f.partner_country_id, t.year
+),
+CountryAvg AS (
+    SELECT
+        partner_country_id,
+        AVG(trade_amount) AS avg_trade
+    FROM CNPartnerTrade
+    GROUP BY partner_country_id
+),
+USAvg AS (
+    SELECT AVG(trade_amount) AS avg_us
+    FROM CNPartnerTrade
+    WHERE partner_country_id = 1
+),
+Top3Similar AS (
+    SELECT TOP 3 c.partner_country_id
+    FROM CountryAvg c
+    CROSS JOIN USAvg u
+     WHERE c.partner_country_id != 1 
+    ORDER BY ABS(c.avg_trade - u.avg_us) ASC
+)
+
+-- 步骤2：分析这些国家和美国在2018~2020的年度贸易额变化
+SELECT
+    t.year,
+    d.country_name,
+    SUM(f.exports_value + f.imports_value) AS total_trade
+FROM dbo.FactTrade f
+JOIN dbo.DimTime t ON f.date_key = t.date_key
+JOIN dbo.DimCountry d ON f.partner_country_id = d.country_id
+WHERE t.year BETWEEN 2018 AND 2020
+  AND f.partner_country_id IN (
+      SELECT partner_country_id FROM Top3Similar
+    --   UNION SELECT 1 -- 加上美国
+  )
+  AND f.region_id = 1
+GROUP BY t.year, d.country_name
+ORDER BY d.country_name, t.year;
+
+
+-- (5)  分析近十年来美国是否是中国最大的贸易顺差来源国。
+WITH TenYearBalance AS (
+    SELECT
+        f.partner_country_id,
+        SUM(f.exports_value - f.imports_value) AS trade_surplus
+    FROM dbo.FactTrade f
+    JOIN dbo.DimTime t ON f.date_key = t.date_key
+    WHERE t.year BETWEEN 2014 AND 2023
+      AND f.region_id = 1
+    GROUP BY f.partner_country_id
+)
+SELECT TOP 1
+    d.country_name,
+    tb.trade_surplus
+FROM TenYearBalance tb
+JOIN dbo.DimCountry d ON tb.partner_country_id = d.country_id
+ORDER BY tb.trade_surplus DESC;
+
+
+-- -- 插入出口表中缺失的国家
+-- INSERT INTO dbo.DimCountry (country_name)
+-- SELECT DISTINCT 地区名称
+-- FROM dbo.StagingExportMonth
+-- WHERE 地区名称 NOT IN (
+--     SELECT country_name FROM dbo.DimCountry
+-- );
+
+-- -- 插入进口表中缺失的国家
+-- INSERT INTO dbo.DimCountry (country_name)
+-- SELECT DISTINCT 地区名称
+-- FROM dbo.StagingImportMonth
+-- WHERE 地区名称 NOT IN (
+--     SELECT country_name FROM dbo.DimCountry
+-- );
+
+-- INSERT INTO dbo.FactTrade (region_id, partner_country_id, date_key, exports_value, imports_value)
 -- SELECT
---     year,
---     usa_trade_total,
---     china_gdp_total,
---     ROUND((usa_trade_total - prev_trade) * 100.0 / NULLIF(prev_trade, 0), 2) AS usa_trade_yoy,
---     ROUND((china_gdp_total - prev_gdp) * 100.0 / NULLIF(prev_gdp, 0), 2) AS gdp_yoy
--- FROM Combined
--- ORDER BY year;
+--     1,  -- region_id 全国
+--     dc.country_id,
+--     se.月度标识,
+--     se.本月出口金额,
+--     NULL
+-- FROM dbo.StagingExportMonth se
+-- JOIN dbo.DimCountry dc ON se.地区名称 = dc.country_name
+-- WHERE NOT EXISTS (
+--     SELECT 1 FROM dbo.FactTrade ft
+--     WHERE ft.region_id = 1
+--       AND ft.partner_country_id = dc.country_id
+--       AND ft.date_key = se.月度标识
+-- );
 
--- -- (1)  查询在指定时间段指定区域的出口额在其进出口总额占比的月度环比增长率。
--- WITH TradeRatio AS (
---     SELECT
---         t.date_key,
---         FORMAT(t.date_key, 'yyyy-MM') AS year_month,
---         SUM(t.exports_value) AS exports,
---         SUM(t.exports_value + t.imports_value) AS total_trade,
---         SUM(t.exports_value) * 1.0 / NULLIF(SUM(t.exports_value + t.imports_value), 0) AS export_ratio
---     FROM dbo.FactTrade t
---     WHERE t.region_id = 1
---       AND t.date_key BETWEEN '2010-01-01' AND '2015-12-31'
---     GROUP BY t.date_key
--- ),
--- RatioWithLag AS (
---     SELECT
---         year_month,
---         export_ratio,
---         LAG(export_ratio) OVER (ORDER BY year_month) AS prev_ratio
---     FROM TradeRatio
--- )
+-- INSERT INTO dbo.FactTrade (region_id, partner_country_id, date_key, exports_value, imports_value)
 -- SELECT
---     year_month,
---     export_ratio,
---     ROUND((export_ratio - prev_ratio) * 100.0, 2) AS mom_growth_pct
--- FROM RatioWithLag
--- WHERE prev_ratio IS NOT NULL;
+--     1,
+--     dc.country_id,
+--     si.月度标识,
+--     NULL,
+--     si.本月进口金额
+-- FROM dbo.StagingImportMonth si
+-- JOIN dbo.DimCountry dc ON si.地区名称 = dc.country_name
+-- WHERE NOT EXISTS (
+--     SELECT 1 FROM dbo.FactTrade ft
+--     WHERE ft.region_id = 1
+--       AND ft.partner_country_id = dc.country_id
+--       AND ft.date_key = si.月度标识
+-- );
+-- UPDATE ft
+-- SET ft.imports_value = si.本月进口金额
+-- FROM dbo.FactTrade ft
+-- JOIN dbo.StagingImportMonth si ON ft.date_key = si.月度标识
+-- JOIN dbo.DimCountry dc ON si.地区名称 = dc.country_name
+-- WHERE ft.partner_country_id = dc.country_id
+--   AND ft.region_id = 1;
 
--- -- (2)  查询分析在特朗普执政的第一个任期中美贸易战爆发当年，比较中国向美国出口额月度环比变化趋势与中国对外出口总额的变化趋势。
--- -- 中国全国对美国出口（region_id = 1）
--- WITH CN_US AS (
---     SELECT
---         t.date_key,
---         FORMAT(t.date_key, 'yyyy-MM') AS ym,
---         SUM(t.exports_value) AS cn_to_us
---     FROM dbo.FactTrade t
---     WHERE t.region_id = 1
---       AND t.partner_country_id = 1  -- 对美国
---       AND t.date_key BETWEEN '2018-01-01' AND '2018-12-31'
---     GROUP BY t.date_key
--- ),
-
--- -- 中国所有省份对世界（非美国）出口
--- CN_ALL_WORLD AS (
---     SELECT
---         t.date_key,
---         FORMAT(t.date_key, 'yyyy-MM') AS ym,
---         SUM(t.exports_value) AS cn_province_to_world
---     FROM dbo.FactTrade t
---     JOIN dbo.DimRegion r ON t.region_id = r.region_id
---     WHERE r.region_level = 2             -- 省级
---       AND t.partner_country_id <> 1      -- 非美国
---       AND t.date_key BETWEEN '2018-01-01' AND '2018-12-31'
---     GROUP BY t.date_key
--- ),
-
--- -- 拼接对比
--- Combined AS (
---     SELECT
---         us.ym,
---         us.cn_to_us,
---         world.cn_province_to_world,
---         LAG(us.cn_to_us) OVER (ORDER BY us.ym) AS prev_us,
---         LAG(world.cn_province_to_world) OVER (ORDER BY world.ym) AS prev_world
---     FROM CN_US us
---     JOIN CN_ALL_WORLD world ON us.ym = world.ym
--- )
-
--- -- 输出结果
--- SELECT
---     ym,
---     ROUND((cn_to_us - prev_us) * 100.0 / NULLIF(prev_us, 0), 2) AS us_export_mom_pct,
---     ROUND((cn_province_to_world - prev_world) * 100.0 / NULLIF(prev_world, 0), 2) AS world_export_mom_pct
--- FROM Combined
--- WHERE prev_us IS NOT NULL AND prev_world IS NOT NULL
--- ORDER BY ym;
-
-
-
--- -- (3) 在特朗普执政第一个任期中，我国是否存在省份或直辖市出口总额年增长率持续下降？若有，查询分析该地区在这个时期的GDP年增长变化，否则提示“在这四年中，没有任何省份或直辖市出口总额年增长率都持续下降”。
--- -- 获取每省每年出口总额
--- WITH AnnualExport AS (
---     SELECT
---         r.region_id,
---         t.year,
---         SUM(f.exports_value) AS total_exports
---     FROM dbo.FactTrade f
---     JOIN dbo.DimTime t ON f.date_key = t.date_key
---     JOIN dbo.DimRegion r ON f.region_id = r.region_id
---     WHERE r.region_level = 2 AND t.year BETWEEN 2016 AND 2020
---     GROUP BY r.region_id, t.year
--- ),
--- ExportGrowth AS (
---     SELECT
---         region_id,
---         year,
---         total_exports,
---         LAG(total_exports) OVER (PARTITION BY region_id ORDER BY year) AS prev_exports
---     FROM AnnualExport
--- ),
--- ExportDeclineFlag AS (
---     SELECT
---         region_id,
---         year,
---         CASE
---             WHEN total_exports < prev_exports THEN 1 ELSE 0
---         END AS is_decline
---     FROM ExportGrowth
---     WHERE prev_exports IS NOT NULL
--- ),
--- DeclineRegion AS (
---     SELECT region_id
---     FROM ExportDeclineFlag
---     GROUP BY region_id
---     HAVING COUNT(*) = 4  -- 4年连续下降
--- )
--- -- 若存在则查询GDP变化，否则提示
--- SELECT
---     t.year,
---     r.region_name,
---     SUM(g.gdp_value) AS total_gdp
--- FROM dbo.FactGDP g
--- JOIN dbo.DimTime t ON g.date_key = t.date_key
--- JOIN dbo.DimRegion r ON g.region_id = r.region_id
--- WHERE r.region_id IN (SELECT region_id FROM DeclineRegion)
---   AND t.year BETWEEN 2017 AND 2020
--- GROUP BY t.year, r.region_name
--- ORDER BY r.region_name, t.year;
-
-
-
--- -- (4)  查询分析在特朗普第一个任期中美贸易冲突发生前，与我国贸易总额变化趋势与美国最相似的三个国家，分析比较贸易战爆发后，他们与我国贸易额和美国与我国贸易额的变化趋势。
--- -- 步骤1：2015~2017 各国年度贸易额
--- WITH CNPartnerTrade AS (
---     SELECT
---         f.partner_country_id,
---         t.year,
---         SUM(f.exports_value + f.imports_value) AS trade_amount
---     FROM dbo.FactTrade f
---     JOIN dbo.DimTime t ON f.date_key = t.date_key
---     WHERE t.year BETWEEN 2015 AND 2017 AND f.region_id = 1
---     GROUP BY f.partner_country_id, t.year
--- ),
--- CountryAvg AS (
---     SELECT
---         partner_country_id,
---         AVG(trade_amount) AS avg_trade
---     FROM CNPartnerTrade
---     GROUP BY partner_country_id
--- ),
--- USAvg AS (
---     SELECT AVG(trade_amount) AS avg_us
---     FROM CNPartnerTrade
---     WHERE partner_country_id = 1
--- ),
--- Top3Similar AS (
---     SELECT TOP 3 c.partner_country_id
---     FROM CountryAvg c
---     CROSS JOIN USAvg u
---     ORDER BY ABS(c.avg_trade - u.avg_us) ASC
--- )
-
--- -- 步骤2：分析这些国家和美国在2018~2020的年度贸易额变化
--- SELECT
---     t.year,
---     d.country_name,
---     SUM(f.exports_value + f.imports_value) AS total_trade
--- FROM dbo.FactTrade f
--- JOIN dbo.DimTime t ON f.date_key = t.date_key
--- JOIN dbo.DimCountry d ON f.partner_country_id = d.country_id
--- WHERE t.year BETWEEN 2018 AND 2020
---   AND f.partner_country_id IN (
---       SELECT partner_country_id FROM Top3Similar
---       UNION SELECT 1 -- 加上美国
---   )
---   AND f.region_id = 1
--- GROUP BY t.year, d.country_name
--- ORDER BY d.country_name, t.year;
-
-
--- -- (5)  分析近十年来美国是否是中国最大的贸易顺差来源国。
--- WITH TenYearBalance AS (
---     SELECT
---         f.partner_country_id,
---         SUM(f.exports_value - f.imports_value) AS trade_surplus
---     FROM dbo.FactTrade f
---     JOIN dbo.DimTime t ON f.date_key = t.date_key
---     WHERE t.year BETWEEN 2014 AND 2023
---       AND f.region_id = 1
---     GROUP BY f.partner_country_id
--- )
--- SELECT TOP 1
---     d.country_name,
---     tb.trade_surplus
--- FROM TenYearBalance tb
--- JOIN dbo.DimCountry d ON tb.partner_country_id = d.country_id
--- ORDER BY tb.trade_surplus DESC;
-
--- -- 若返回 country_name = 'United States'，则为最大顺差国
+-- SELECT ft.date_key, ft.partner_country_id, dc.country_name, si.地区名称, si.月度标识, si.本月进口金额
+-- FROM dbo.FactTrade ft
+-- JOIN dbo.DimCountry dc ON ft.partner_country_id = dc.country_id
+-- JOIN dbo.StagingImportMonth si ON ft.date_key = si.月度标识
+-- WHERE dc.country_name = si.地区名称
+--   AND ft.region_id = 1;
