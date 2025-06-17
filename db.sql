@@ -1,260 +1,8 @@
--- -- Part1
--- IF DB_ID(N'TGP') IS NOT NULL
---     DROP DATABASE TGP1;
--- GO
+-- TheGreatProject
 -- CREATE DATABASE TGP COLLATE Chinese_PRC_CI_AS;
 -- GO
 USE TGP;
 GO
--- CREATE TABLE DimTime(
---     date_key DATE PRIMARY KEY,
---     [quarter] TINYINT NOT NULL CHECK([quarter] BETWEEN 1 AND 4),
---     [month] TINYINT NOT NULL CHECK([month] BETWEEN 1 AND 12),
---     year_month AS (
---         CAST([year] AS CHAR(4)) + '-' +
---         RIGHT('0' + CAST([month] AS VARCHAR(2)), 2)
---     ) PERSISTED,
---     month_start BIT NOT NULL DEFAULT 0
--- );
-
--- CREATE TABLE DimRegion(
---     region_id INT IDENTITY(1,1) PRIMARY KEY,
---     region_name NVARCHAR(100) NOT NULL,
---     region_level TINYINT NOT NULL CHECK(region_level BETWEEN 0 AND 5),
---     parent_region_id INT NULL REFERENCES DimRegion(region_id)
--- );
--- CREATE UNIQUE INDEX UX_DimRegion_Name_Level
---         ON DimRegion(region_name, region_level);
-
--- CREATE TABLE DimRegionGroup(
---     region_group_id TINYINT PRIMARY KEY,
---     group_name NVARCHAR(20) NOT NULL UNIQUE
--- );
-
--- CREATE TABLE Bridge_Region_Group(
---     region_id INT NOT NULL REFERENCES DimRegion(region_id),
---     region_group_id TINYINT NOT NULL REFERENCES DimRegionGroup(region_group_id),
---     PRIMARY KEY(region_id, region_group_id)
--- );
-
--- CREATE TABLE DimCountry(
---     country_id INT IDENTITY(1,1) PRIMARY KEY,
---     country_name NVARCHAR(100) NOT NULL UNIQUE
--- );
-
--- CREATE TABLE FactGDP(
---     region_id INT NOT NULL REFERENCES DimRegion(region_id),
---     date_key DATE NOT NULL REFERENCES DimTime(date_key),
---     gdp_value DECIMAL(18,2) NOT NULL,
---     PRIMARY KEY(region_id, date_key)
--- );
--- CREATE INDEX IX_FactGDP_DateRegion ON FactGDP(date_key, region_id);
-
--- CREATE TABLE FactDemographics(
---     region_id INT NOT NULL REFERENCES DimRegion(region_id),
---     date_key DATE NOT NULL REFERENCES DimTime(date_key),
---     population BIGINT NOT NULL,
---     area_km2 DECIMAL(18,2) NULL,
---     PRIMARY KEY(region_id, date_key)
--- );
--- CREATE INDEX IX_Demo_DateRegion ON FactDemographics(date_key, region_id);
-
--- CREATE TABLE FactTrade(
---     region_id INT NOT NULL REFERENCES DimRegion(region_id),
---     partner_country_id INT NOT NULL REFERENCES DimCountry(country_id),
---     date_key DATE NOT NULL REFERENCES DimTime(date_key),
---     exports_value DECIMAL(18,2) NULL,
---     imports_value DECIMAL(18,2) NULL,
---     PRIMARY KEY(region_id, partner_country_id, date_key)
--- );
--- CREATE INDEX IX_Trade_Date_RegionCountry
---         ON FactTrade(date_key, region_id, partner_country_id);
--- CREATE TABLE Result_PerCapitaGDP_Ranking(
---     analysis_id INT IDENTITY(1,1) PRIMARY KEY,
---     region_id INT NOT NULL REFERENCES DimRegion(region_id),
---     date_key DATE NOT NULL REFERENCES DimTime(date_key),
---     per_capita_gdp DECIMAL(18,2) NOT NULL,
---     rank_in_date INT NOT NULL,
---     created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
--- );
-
--- CREATE TABLE Result_ExportContribution(
---     analysis_id INT IDENTITY(1,1) PRIMARY KEY,
---     region_group_id TINYINT NOT NULL REFERENCES DimRegionGroup(region_group_id),
---     date_from DATE NOT NULL,
---     date_to DATE NOT NULL,
---     contribution DECIMAL(10,4) NOT NULL,
---     compare_flag CHAR(1) NOT NULL CHECK(compare_flag IN('>','=','<')),
---     created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
--- );
-
--- -- Part2
-
--- USE TGP;
--- GO
-
--- ;WITH Months AS (
---     SELECT DISTINCT [月度标识] AS ym
---     FROM dbo.StagingNationalTradeMonthly
---     WHERE [月度标识] IS NOT NULL
--- ), Parsed AS (
---     SELECT 
---       EOMONTH(CAST(ym + '-01' AS DATE)) AS dm
---     FROM Months
---     -- 可加 TRY_CONVERT 验证格式
--- )
--- INSERT INTO dbo.DimTime(date_key, [year], [quarter], [month])
--- SELECT
---     dm AS date_key,
---     YEAR(dm),
---     DATEPART(QUARTER, dm),
---     MONTH(dm)
--- FROM Parsed P
--- WHERE NOT EXISTS (
---     SELECT 1 FROM dbo.DimTime DT 
---     WHERE DT.date_key = P.dm
--- );
--- GO
-
--- ;WITH Months AS (
---     SELECT DISTINCT [月度标识] AS ym
---     FROM dbo.StagingNationalTradeMonthly
---     WHERE [月度标识] IS NOT NULL
--- ), ParsedStart AS (
---     SELECT CAST(ym + '-01' AS DATE) AS dstart
---     FROM Months
--- )
--- INSERT INTO dbo.DimTime(date_key, [year], [quarter], [month], month_start)
--- SELECT
---     dstart,
---     YEAR(dstart),
---     DATEPART(QUARTER, dstart),
---     MONTH(dstart),
---     1
--- FROM ParsedStart P
--- WHERE NOT EXISTS (
---     SELECT 1 FROM dbo.DimTime DT 
---     WHERE DT.date_key = P.dstart
--- );
--- GO
-
--- DECLARE @USID INT;
--- SELECT @USID = country_id FROM dbo.DimCountry WHERE country_name = N'United States';
--- IF @USID IS NULL
--- BEGIN
---     INSERT INTO dbo.DimCountry(country_name) VALUES (N'United States');
---     SET @USID = SCOPE_IDENTITY();
--- END
-
--- DECLARE @AllID INT;
--- SELECT @AllID = country_id FROM dbo.DimCountry WHERE country_name = N'ALL';
--- IF @AllID IS NULL
--- BEGIN
---     INSERT INTO dbo.DimCountry(country_name) VALUES (N'ALL');
---     SET @AllID = SCOPE_IDENTITY();
--- END
--- GO
-
--- DECLARE @ChinaID INT = (SELECT region_id FROM dbo.DimRegion WHERE region_name=N'中国' AND region_level=0);
--- IF @ChinaID IS NULL
--- BEGIN
---     RAISERROR('DimRegion 中缺少 中国 记录，请先插入。', 16, 1);
---     RETURN;
--- END
--- DECLARE @USID INT = (SELECT country_id FROM dbo.DimCountry WHERE country_name=N'United States');
-
--- INSERT INTO dbo.FactUSTradeAnnual(region_id, partner_country_id, date_key, category_id, export_value, import_value)
--- SELECT
---     @ChinaID AS region_id,
---     @USID AS partner_country_id,
---     DT.date_key,
---     DC.category_id,
---     S.[出口_亿美元],
---     S.[进口_亿美元]
--- FROM dbo.StagingUSTradeAnnual AS S
--- JOIN dbo.DimCategory AS DC
---   ON DC.category_name = LTRIM(RTRIM(S.[商品分类]))
--- JOIN dbo.DimTime AS DT
---   ON DT.date_key = CAST(CAST(S.[年份] AS VARCHAR(4)) + '-12-31' AS DATE)
--- WHERE S.[商品分类] IS NOT NULL
---   AND S.[年份] IS NOT NULL
---   AND NOT EXISTS (
---       SELECT 1 FROM dbo.FactUSTradeAnnual F
---       WHERE F.region_id=@ChinaID 
---         AND F.partner_country_id=@USID
---         AND F.date_key=DT.date_key
---         AND F.category_id=DC.category_id
---   );
--- GO
-
--- DECLARE @ChinaID INT = (SELECT region_id FROM dbo.DimRegion WHERE region_name=N'中国' AND region_level=0);
--- DECLARE @AllID INT   = (SELECT country_id FROM dbo.DimCountry WHERE country_name=N'ALL');
-
--- INSERT INTO dbo.FactTrade(region_id, partner_country_id, date_key, exports_value, imports_value)
--- SELECT
---     @ChinaID,
---     @AllID,
---     DT.date_key,
---     S.[当月出口总额],
---     S.[当月进口总额]
--- FROM dbo.StagingNationalTradeMonthly AS S
--- JOIN dbo.DimTime AS DT
---   ON DT.date_key = EOMONTH(CAST(S.[月度标识] + '-01' AS DATE))
--- WHERE S.[月度标识] IS NOT NULL
---   AND NOT EXISTS (
---     SELECT 1 FROM dbo.FactTrade F
---     WHERE F.region_id=@ChinaID 
---       AND F.partner_country_id=@AllID
---       AND F.date_key=DT.date_key
---   );
--- GO
--- DECLARE @ChinaID INT = (SELECT region_id FROM dbo.DimRegion WHERE region_name=N'中国' AND region_level=0);
--- DECLARE @AllID INT = (SELECT country_id FROM dbo.DimCountry WHERE country_name=N'ALL');
--- -- 全国月度进出口环比增长率（出口占比环比、出口同比等）
--- WITH Monthly AS (
---   SELECT 
---     DT.date_key,
---     DT.year_month,
---     F.exports_value,
---     F.imports_value,
---     F.exports_value - LAG(F.exports_value) OVER(ORDER BY DT.date_key) AS diff_exports,
---     LAG(F.exports_value) OVER(ORDER BY DT.date_key) AS prev_exports,
---     F.imports_value - LAG(F.imports_value) OVER(ORDER BY DT.date_key) AS diff_imports,
---     LAG(F.imports_value) OVER(ORDER BY DT.date_key) AS prev_imports
---   FROM dbo.FactTrade AS F
---   JOIN dbo.DimTime AS DT ON F.date_key = DT.date_key
---   WHERE F.region_id = @ChinaID AND F.partner_country_id = @AllID
--- )
-
--- SELECT 
---   year_month,
---   exports_value,
---   CASE 
---     WHEN prev_exports IS NULL OR prev_exports = 0 THEN NULL
---     ELSE diff_exports * 1.0 / prev_exports 
---   END AS exports_mom_growth,  -- 月度环比增长率
---   CASE 
---     WHEN LAG(exports_value, 12) OVER(ORDER BY date_key) IS NOT NULL 
---          AND LAG(exports_value, 12) OVER(ORDER BY date_key) <> 0 
---     THEN (exports_value - LAG(exports_value,12) OVER(ORDER BY date_key)) *1.0 
---          / LAG(exports_value,12) OVER(ORDER BY date_key) 
---     ELSE NULL 
---   END AS exports_yoy_growth,  -- 月度同比增长率
---   imports_value,
---   CASE 
---     WHEN prev_imports IS NULL OR prev_imports = 0 THEN NULL
---     ELSE diff_imports * 1.0 / prev_imports 
---   END AS imports_mom_growth,
---   CASE 
---     WHEN LAG(imports_value,12) OVER(ORDER BY date_key) IS NOT NULL 
---          AND LAG(imports_value,12) OVER(ORDER BY date_key) <> 0 
---     THEN (imports_value - LAG(imports_value,12) OVER(ORDER BY date_key)) *1.0 
---          / LAG(imports_value,12) OVER(ORDER BY date_key) 
---     ELSE NULL 
---   END AS imports_yoy_growth
--- FROM Monthly
--- ORDER BY date_key;
-
 
 -- 1.1查询指定时间段GDP最高的区域
 SELECT TOP 1 DR.region_name, SUM(FG.gdp_value) AS total_gdp
@@ -321,82 +69,82 @@ joined AS (
 )
 SELECT * FROM joined;
 
--- -- 1.5查询指定时间段各区域的人均GDP值和排名，并且将结果存储在数据库中。
--- WITH per_capita AS (
---     SELECT
---         f.region_id,
---         f.date_key,
---         SUM(f.gdp_value) / NULLIF(MAX(d.population), 0) AS per_capita_gdp
---     FROM dbo.FactGDP f
---     JOIN dbo.FactDemographics d ON f.region_id = d.region_id AND f.date_key = d.date_key
---     WHERE f.date_key = '2020-12-31'
---     GROUP BY f.region_id, f.date_key
--- ),
--- ranked AS (
---     SELECT *,
---         RANK() OVER (ORDER BY per_capita_gdp DESC) AS rank_in_date
---     FROM per_capita
--- )
--- INSERT INTO dbo.Result_PerCapitaGDP_Ranking(region_id, date_key, per_capita_gdp, rank_in_date)
--- SELECT
---     region_id,
---     date_key,
---     per_capita_gdp,
---     rank_in_date
--- FROM ranked;
+-- 1.5查询指定时间段各区域的人均GDP值和排名，并且将结果存储在数据库中。
+WITH per_capita AS (
+    SELECT
+        f.region_id,
+        f.date_key,
+        SUM(f.gdp_value) / NULLIF(MAX(d.population), 0) AS per_capita_gdp
+    FROM dbo.FactGDP f
+    JOIN dbo.FactDemographics d ON f.region_id = d.region_id AND f.date_key = d.date_key
+    WHERE f.date_key = '2020-12-31'
+    GROUP BY f.region_id, f.date_key
+),
+ranked AS (
+    SELECT *,
+        RANK() OVER (ORDER BY per_capita_gdp DESC) AS rank_in_date
+    FROM per_capita
+)
+INSERT INTO dbo.Result_PerCapitaGDP_Ranking(region_id, date_key, per_capita_gdp, rank_in_date)
+SELECT
+    region_id,
+    date_key,
+    per_capita_gdp,
+    rank_in_date
+FROM ranked;
 
 
--- -- 1.6 分析比较指定时间段我国东部、西部、中部、东北部地区出口对该区域GDP的贡献率，以及判断贡献率是高于全国平均值，还是等于或低于平均值。将结果存储在数据库中。
--- DECLARE @from_date DATE = '2010-01-01';
--- DECLARE @to_date DATE = '2020-12-31';
+-- 1.6 分析比较指定时间段我国东部、西部、中部、东北部地区出口对该区域GDP的贡献率，以及判断贡献率是高于全国平均值，还是等于或低于平均值。将结果存储在数据库中。
+DECLARE @from_date DATE = '2010-01-01';
+DECLARE @to_date DATE = '2020-12-31';
 
--- -- 第一步：全国 GDP 与 出口总额
--- WITH NationalTotal AS (
---     SELECT
---         SUM(g.gdp_value) AS total_gdp,
---         SUM(t.exports_value) AS total_exports
---     FROM dbo.FactGDP g
---     JOIN dbo.FactTrade t ON g.region_id = t.region_id AND g.date_key = t.date_key
---     WHERE t.date_key BETWEEN @from_date AND @to_date
--- ),
--- AvgContribution AS (
---     SELECT
---         CAST(total_exports AS FLOAT) / NULLIF(total_gdp, 0) AS avg_contribution
---     FROM NationalTotal
--- ),
+-- 第一步：全国 GDP 与 出口总额
+WITH NationalTotal AS (
+    SELECT
+        SUM(g.gdp_value) AS total_gdp,
+        SUM(t.exports_value) AS total_exports
+    FROM dbo.FactGDP g
+    JOIN dbo.FactTrade t ON g.region_id = t.region_id AND g.date_key = t.date_key
+    WHERE t.date_key BETWEEN @from_date AND @to_date
+),
+AvgContribution AS (
+    SELECT
+        CAST(total_exports AS FLOAT) / NULLIF(total_gdp, 0) AS avg_contribution
+    FROM NationalTotal
+),
 
--- -- 第二步：每个大区的 GDP 与 出口总额（通过省份汇总）
--- RegionGroupTotal AS (
---     SELECT
---         brg.region_group_id,
---         SUM(g.gdp_value) AS total_gdp,
---         SUM(t.exports_value) AS total_exports
---     FROM dbo.DimRegion r
---     JOIN dbo.Bridge_Region_Group brg ON r.region_id = brg.region_id
---     JOIN dbo.FactGDP g ON g.region_id = r.region_id
---     JOIN dbo.FactTrade t ON t.region_id = r.region_id AND t.date_key = g.date_key
---     WHERE r.region_level = 2  -- 只聚合省级单位
---       AND t.date_key BETWEEN @from_date AND @to_date
---     GROUP BY brg.region_group_id
--- )
+-- 第二步：每个大区的 GDP 与 出口总额（通过省份汇总）
+RegionGroupTotal AS (
+    SELECT
+        brg.region_group_id,
+        SUM(g.gdp_value) AS total_gdp,
+        SUM(t.exports_value) AS total_exports
+    FROM dbo.DimRegion r
+    JOIN dbo.Bridge_Region_Group brg ON r.region_id = brg.region_id
+    JOIN dbo.FactGDP g ON g.region_id = r.region_id
+    JOIN dbo.FactTrade t ON t.region_id = r.region_id AND t.date_key = g.date_key
+    WHERE r.region_level = 2  -- 只聚合省级单位
+      AND t.date_key BETWEEN @from_date AND @to_date
+    GROUP BY brg.region_group_id
+)
 
--- -- 第三步：插入分析结果
--- INSERT INTO dbo.Result_ExportContribution (
---     region_group_id, date_from, date_to, contribution, compare_flag, created_at
--- )
--- SELECT
---     r.region_group_id,
---     @from_date,
---     @to_date,
---     CAST(r.total_exports AS FLOAT) / NULLIF(r.total_gdp, 0) AS contribution,
---     CASE
---         WHEN CAST(r.total_exports AS FLOAT) / NULLIF(r.total_gdp, 0) > a.avg_contribution THEN '>'
---         WHEN CAST(r.total_exports AS FLOAT) / NULLIF(r.total_gdp, 0) = a.avg_contribution THEN '='
---         ELSE '<'
---     END AS compare_flag,
---     SYSUTCDATETIME()
--- FROM RegionGroupTotal r
--- CROSS JOIN AvgContribution a;
+-- 第三步：插入分析结果
+INSERT INTO dbo.Result_ExportContribution (
+    region_group_id, date_from, date_to, contribution, compare_flag, created_at
+)
+SELECT
+    r.region_group_id,
+    @from_date,
+    @to_date,
+    CAST(r.total_exports AS FLOAT) / NULLIF(r.total_gdp, 0) AS contribution,
+    CASE
+        WHEN CAST(r.total_exports AS FLOAT) / NULLIF(r.total_gdp, 0) > a.avg_contribution THEN '>'
+        WHEN CAST(r.total_exports AS FLOAT) / NULLIF(r.total_gdp, 0) = a.avg_contribution THEN '='
+        ELSE '<'
+    END AS compare_flag,
+    SYSUTCDATETIME()
+FROM RegionGroupTotal r
+CROSS JOIN AvgContribution a;
 
 -- 1.7 比较最近二十年中美贸易总额增长率变化趋势与我国GDP变化趋势。
 -- 步骤：先按年汇总中美贸易总额与全国 GDP
@@ -442,6 +190,133 @@ SELECT
     ROUND((china_gdp_total - prev_gdp) * 100.0 / NULLIF(prev_gdp, 0), 2) AS gdp_yoy
 FROM Combined
 ORDER BY year;
+
+
+-- 2
+-- 2.1查询指定时间段对美出口/进口额占比最高的三类商品及金额
+-- 修改年份范围
+DECLARE @start_year INT = 2017, @end_year INT = 2020;
+
+WITH CleanedData AS (
+    SELECT 
+        LTRIM(RTRIM(REPLACE(REPLACE(REPLACE([商品分类], CHAR(10), ''), CHAR(13), ''), '"', ''))) AS 商品分类清洗,
+        年份,
+        [出口_亿美元]
+    FROM StagingUSTradeAnnual
+    WHERE [商品分类] LIKE '第%类%'
+)
+SELECT TOP 3 
+    商品分类清洗 AS 商品分类,
+    SUM([出口_亿美元]) AS 出口总额,
+    SUM([出口_亿美元]) * 1.0 / SUM(SUM([出口_亿美元])) OVER() AS 出口占比
+FROM CleanedData
+WHERE 年份 BETWEEN 2017 AND 2020
+GROUP BY 商品分类清洗
+ORDER BY 出口总额 DESC;
+
+
+
+-- 2.2判断2018年是否存在商品出口额同比增长率为负，若无则取后20%
+-- 第一步：清洗数据，筛选“第X类”形式
+WITH CleanedData AS (
+    SELECT 
+        LTRIM(RTRIM(REPLACE(REPLACE(REPLACE([商品分类], CHAR(10), ''), CHAR(13), ''), '"', ''))) AS 商品分类,
+        年份,
+        [出口_亿美元]
+    FROM StagingUSTradeAnnual
+    WHERE [商品分类] LIKE '第%类%'
+),
+-- 第二步：汇总2017和2018年数据
+YearlyExport AS (
+    SELECT 商品分类, 年份, SUM([出口_亿美元]) AS 出口额
+    FROM CleanedData
+    WHERE 年份 IN (2017, 2018)
+    GROUP BY 商品分类, 年份
+),
+-- 第三步：把数据“转横”结构用于计算增长率
+ExportPivot AS (
+    SELECT 
+        商品分类,
+        MAX(CASE WHEN 年份 = 2017 THEN 出口额 END) AS y2017,
+        MAX(CASE WHEN 年份 = 2018 THEN 出口额 END) AS y2018
+    FROM YearlyExport
+    GROUP BY 商品分类
+),
+-- 第四步：计算同比增长率
+Growth AS (
+    SELECT 商品分类,
+           y2017,
+           y2018,
+           CASE 
+               WHEN y2017 IS NULL OR y2017 = 0 THEN NULL
+               ELSE (y2018 - y2017) * 1.0 / y2017 
+           END AS 增长率
+    FROM ExportPivot
+)
+-- 第五步：判断输出
+SELECT 商品分类, 增长率
+FROM Growth
+WHERE 增长率 < 0
+
+UNION ALL
+
+SELECT 商品分类, 增长率
+FROM (
+    SELECT 商品分类, 增长率,
+           PERCENT_RANK() OVER (ORDER BY 增长率) AS rnk
+    FROM Growth
+) t
+WHERE NOT EXISTS (SELECT 1 FROM Growth WHERE 增长率 < 0)
+  AND rnk <= 0.2;
+
+
+-- 2.3分析三类商品在近20年中出口占比的同比增长率趋
+WITH export_total AS (
+    SELECT 年份, SUM([出口_亿美元]) AS total_export
+    FROM StagingUSTradeAnnual
+    GROUP BY 年份
+),
+export_grouped AS (
+    SELECT 年份,
+           CASE
+               WHEN 商品分类 LIKE '%纺织%' THEN '纺织制品'
+               WHEN 商品分类 LIKE '%机器%' OR 商品分类 LIKE '%电气%' OR 商品分类 LIKE '%录音%' THEN '电子机械'
+               WHEN 商品分类 LIKE '%车辆%' OR 商品分类 LIKE '%航空%' OR 商品分类 LIKE '%船舶%' THEN '交通运输设备'
+               ELSE NULL
+           END AS 商品大类,
+           SUM([出口_亿美元]) AS 类别出口
+    FROM StagingUSTradeAnnual
+    WHERE 商品分类 LIKE '%纺织%'
+       OR 商品分类 LIKE '%机器%'
+       OR 商品分类 LIKE '%电气%'
+       OR 商品分类 LIKE '%录音%'
+       OR 商品分类 LIKE '%车辆%'
+       OR 商品分类 LIKE '%航空%'
+       OR 商品分类 LIKE '%船舶%'
+    GROUP BY 年份,
+             CASE
+               WHEN 商品分类 LIKE '%纺织%' THEN '纺织制品'
+               WHEN 商品分类 LIKE '%机器%' OR 商品分类 LIKE '%电气%' OR 商品分类 LIKE '%录音%' THEN '电子机械'
+               WHEN 商品分类 LIKE '%车辆%' OR 商品分类 LIKE '%航空%' OR 商品分类 LIKE '%船舶%' THEN '交通运输设备'
+               ELSE NULL
+           END
+),
+export_ratio AS (
+    SELECT G.年份, G.商品大类,
+           G.类别出口 * 1.0 / T.total_export AS 占比
+    FROM export_grouped G
+    JOIN export_total T ON G.年份 = T.年份
+),
+growth_rate AS (
+    SELECT *,
+           占比 - LAG(占比) OVER (PARTITION BY 商品大类 ORDER BY 年份) AS 同比增长,
+           (占比 - LAG(占比) OVER (PARTITION BY 商品大类 ORDER BY 年份)) / NULLIF(LAG(占比) OVER (PARTITION BY 商品大类 ORDER BY 年份), 0) AS 同比增长率
+    FROM export_ratio
+)
+SELECT * FROM growth_rate
+ORDER BY 商品大类, 年份;
+
+
 
 -- (1)  查询在指定时间段指定区域的出口额在其进出口总额占比的月度环比增长率。
 WITH TradeRatio AS (
@@ -523,6 +398,7 @@ ORDER BY ym;
 
 -- (3) 在特朗普执政第一个任期中，我国是否存在省份或直辖市出口总额年增长率持续下降？若有，查询分析该地区在这个时期的GDP年增长变化，否则提示“在这四年中，没有任何省份或直辖市出口总额年增长率都持续下降”。
 -- 获取每省每年出口总额
+-- 1. 获取各省每年的出口总额（2016-2020，用于计算增长率）
 WITH AnnualExport AS (
     SELECT
         r.region_id,
@@ -531,34 +407,45 @@ WITH AnnualExport AS (
     FROM dbo.FactTrade f
     JOIN dbo.DimTime t ON f.date_key = t.date_key
     JOIN dbo.DimRegion r ON f.region_id = r.region_id
-    WHERE r.region_level = 2 AND t.year BETWEEN 2016 AND 2020
+    WHERE r.region_level = 2  -- 省/直辖市级
+      AND t.year BETWEEN 2016 AND 2020
     GROUP BY r.region_id, t.year
 ),
-ExportGrowth AS (
+
+-- 2. 计算每个省份每年的出口同比增长率
+ExportGrowthRate AS (
     SELECT
         region_id,
         year,
         total_exports,
-        LAG(total_exports) OVER (PARTITION BY region_id ORDER BY year) AS prev_exports
+        LAG(total_exports) OVER (PARTITION BY region_id ORDER BY year) AS prev_exports,
+        CASE
+            WHEN LAG(total_exports) OVER (PARTITION BY region_id ORDER BY year) IS NULL THEN NULL
+            WHEN LAG(total_exports) OVER (PARTITION BY region_id ORDER BY year) = 0 THEN NULL
+            ELSE 
+                (total_exports - LAG(total_exports) OVER (PARTITION BY region_id ORDER BY year)) * 1.0 /
+                LAG(total_exports) OVER (PARTITION BY region_id ORDER BY year)
+        END AS growth_rate
     FROM AnnualExport
 ),
-ExportDeclineFlag AS (
+
+-- 3. 标记2017–2020年中增长率为负的年份数量
+DeclineCount AS (
     SELECT
         region_id,
-        year,
-        CASE
-            WHEN total_exports < prev_exports THEN 1 ELSE 0
-        END AS is_decline
-    FROM ExportGrowth
-    WHERE prev_exports IS NOT NULL
+        SUM(CASE WHEN year BETWEEN 2017 AND 2020 AND growth_rate < 0 THEN 1 ELSE 0 END) AS decline_years
+    FROM ExportGrowthRate
+    GROUP BY region_id
 ),
+
+-- 4. 找到增长率连续为负的省份（四年均为负）
 DeclineRegion AS (
     SELECT region_id
-    FROM ExportDeclineFlag
-    GROUP BY region_id
-    HAVING COUNT(*) = 4  -- 4年连续下降
+    FROM DeclineCount
+    WHERE decline_years = 4
 )
--- 若存在则查询GDP变化，否则提示
+
+-- 5. 查询这些地区的GDP变化（2017–2020）
 SELECT
     t.year,
     r.region_name,
@@ -570,6 +457,7 @@ WHERE r.region_id IN (SELECT region_id FROM DeclineRegion)
   AND t.year BETWEEN 2017 AND 2020
 GROUP BY t.year, r.region_name
 ORDER BY r.region_name, t.year;
+
 
 
 
@@ -640,66 +528,3 @@ SELECT TOP 1
 FROM TenYearBalance tb
 JOIN dbo.DimCountry d ON tb.partner_country_id = d.country_id
 ORDER BY tb.trade_surplus DESC;
-
-
--- -- 插入出口表中缺失的国家
--- INSERT INTO dbo.DimCountry (country_name)
--- SELECT DISTINCT 地区名称
--- FROM dbo.StagingExportMonth
--- WHERE 地区名称 NOT IN (
---     SELECT country_name FROM dbo.DimCountry
--- );
-
--- -- 插入进口表中缺失的国家
--- INSERT INTO dbo.DimCountry (country_name)
--- SELECT DISTINCT 地区名称
--- FROM dbo.StagingImportMonth
--- WHERE 地区名称 NOT IN (
---     SELECT country_name FROM dbo.DimCountry
--- );
-
--- INSERT INTO dbo.FactTrade (region_id, partner_country_id, date_key, exports_value, imports_value)
--- SELECT
---     1,  -- region_id 全国
---     dc.country_id,
---     se.月度标识,
---     se.本月出口金额,
---     NULL
--- FROM dbo.StagingExportMonth se
--- JOIN dbo.DimCountry dc ON se.地区名称 = dc.country_name
--- WHERE NOT EXISTS (
---     SELECT 1 FROM dbo.FactTrade ft
---     WHERE ft.region_id = 1
---       AND ft.partner_country_id = dc.country_id
---       AND ft.date_key = se.月度标识
--- );
-
--- INSERT INTO dbo.FactTrade (region_id, partner_country_id, date_key, exports_value, imports_value)
--- SELECT
---     1,
---     dc.country_id,
---     si.月度标识,
---     NULL,
---     si.本月进口金额
--- FROM dbo.StagingImportMonth si
--- JOIN dbo.DimCountry dc ON si.地区名称 = dc.country_name
--- WHERE NOT EXISTS (
---     SELECT 1 FROM dbo.FactTrade ft
---     WHERE ft.region_id = 1
---       AND ft.partner_country_id = dc.country_id
---       AND ft.date_key = si.月度标识
--- );
--- UPDATE ft
--- SET ft.imports_value = si.本月进口金额
--- FROM dbo.FactTrade ft
--- JOIN dbo.StagingImportMonth si ON ft.date_key = si.月度标识
--- JOIN dbo.DimCountry dc ON si.地区名称 = dc.country_name
--- WHERE ft.partner_country_id = dc.country_id
---   AND ft.region_id = 1;
-
--- SELECT ft.date_key, ft.partner_country_id, dc.country_name, si.地区名称, si.月度标识, si.本月进口金额
--- FROM dbo.FactTrade ft
--- JOIN dbo.DimCountry dc ON ft.partner_country_id = dc.country_id
--- JOIN dbo.StagingImportMonth si ON ft.date_key = si.月度标识
--- WHERE dc.country_name = si.地区名称
---   AND ft.region_id = 1;
